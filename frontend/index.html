@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>CodeName</title>
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+
+    <!-- Bootstrap core CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
+    <style>
+        .gridrow {
+            margin-top: .5rem; 
+            margin-bottom: .5rem;
+        }
+        
+        .btn-neutral-picked {
+            background-color: #e8e6e6;
+            border-color: #e8e6e6;
+            color: #212529;
+        }
+
+        .btn-death {
+            background-color: #8e8e8e;
+            border-color: #343a40;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id='app' class="container-fluid">
+    <div class="row border-bottom shadow-sm p-1 mb-2">
+        <div class="col-2">
+            <h1>CodeName</h1>
+        </div>
+        <div class="col-8 text-center">
+            <h2 v-if="user != null">Hello {{ user.name }}</h2>
+            <span v-if="roomUrl">
+                Send this link to your friends: 
+                <a :href="roomUrl">{{ roomUrl }}</a>
+            </span>
+        </div>
+        <div class="col-2">
+        </div>
+    </div>
+    <main role="main">
+        <div class="row">
+            <div class="col-2">
+            <user-list 
+                v-if="showUsers"
+                :red="game.red"
+                :blue="game.blue"
+            >
+            </user-list>
+            </div>
+            <div class="col-10">
+
+                <div class="row">
+                    <div class="col-10">
+                        <join-notice
+                            v-if="showJoinNotice"
+                            :enoughplayers="enoughPlayers"
+                        >
+                        </join-notice>
+                        <hint-notice
+                            v-if="showHintNotice"
+                            :game="game"
+                        >
+                        </hint-notice>
+                        <end
+                            v-if="showEnd"
+                            :winner="winner"
+                        >
+                        </end>
+                    </div>
+                </div>
+
+                <login v-if="showLogin"
+                >
+                </login>
+
+                <master-select 
+                    v-if="showMasterSelect"
+                    :red="game.red"
+                    :blue="game.blue"
+                >
+                </master-select>
+
+                <board
+                    v-if="showBoard"
+                    :board="game.board"
+                    :tiles="tiles"
+                >
+                </board>
+                <pass
+                    v-if="showPass"
+                >
+                </pass>
+
+                <hint-box
+                    v-if="showHintBox"
+                >
+                </hint-box>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script type="text/x-template" id="login">
+<div class="row">
+    <div class="col-3"></div>
+    <div class="col-3">
+        <div class="card p-1">
+            <form v-on:submit.prevent>
+                <div class="form-group">
+                    <label for="name">Enter your name:</label>
+                    <input id="name" type="text" v-model="name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Choose your team:</label>
+                    <div class="form-check">
+                        <input id="blue" type="radio" value="blue" v-model="team" class="form-check-input">
+                        <label class="form-check-label" for="blue">Blue</label>
+                    </div>
+                    <div class="form-check">
+                        <input id="red" type="radio" value="red" v-model="team" class="form-check-input">
+                        <label class="form-check-label" for="red">Red</label>
+                    </div>
+                </div>
+                <button @click="login" type="submit" class="btn btn-primary">Start</button>
+            </form>
+        </div>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="user-list">
+<div>
+    <div class="card border-primary mb-1">
+        <div class="card-header text-primary">Blue team</div>
+        <div class="card-body">
+            <team-list
+                :players="blue.players"
+            >
+            </team-list>
+        </div>
+    </div>
+    <div class="card border-danger mb-1">
+        <div class="card-header text-danger">Red team</div>
+        <div class="card-body">
+            <team-list
+                :players="red.players"
+            >
+            </team-list>
+        </div>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="team-list">
+<div class="list-group">
+    <span 
+        v-for="player in players"
+        :key="player"
+    >
+        <span class="list-group-item list-group-item-action">{{ player }}</span>
+    </span>
+</div>
+</script>
+
+
+<script type="text/x-template" id="master-select">
+<div class="row">
+    <div class="col-3"></div>
+    <div class="col-4">
+        <div class="card p-1">
+            <form v-on:submit.prevent>
+                <h4>Pick the card masters for each team</h4>
+
+                <master-list
+                    :players="red.players"
+                    team="red"
+                >
+                </master-list>
+
+                <master-list
+                    :players="blue.players"
+                    team="blue"
+                >
+                </master-list>
+
+                <button @click="start" type="submit" class="btn btn-primary">Select</button>
+            </form>
+        </div>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="master-list">
+<div class="form-group">
+    <label>{{ teamCapitalized }} team</label>
+    <div class="form-check" v-for="player in players" :key="'master-' + player">
+        <input 
+            :id="player" :name="player" :value="player" v-model="master" 
+            class="form-check-input" type="radio"
+        >
+        <label class="form-check-label" :for="player">{{ player }}</label>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="board">
+<div>
+    <div v-for="(row, i) in grid" class="row gridrow">
+        <cell
+            v-for="cell in row"
+            :key="cell.x + '-' + cell.y"
+            :cell="cell"
+        >
+        </cell>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="cell">
+<div class="col-2">
+    <button type="button" @click="guess" :class="cellClass">
+        {{ cell.word }}
+    </button>
+</div>
+</script>
+
+<script type="text/x-template" id="hint-box">
+<div class="row">
+    <div class="col-3"></div>
+    <div class="col-3">
+        <div class="card p-1">
+        <form v-on:submit.prevent>
+            <div class="form-group">
+                <label for="hint">Hint</label>
+                <input id="hint" v-model="hint" type="text" class="form-control" aria-describedby="hintHelp">
+                <small id="hintHelp" class="form-text text-muted">
+                    Enter a word to help your team guess some cards
+                </small>
+            </div>
+            <div class="form-group">
+                <label for="guesses">Guesses</label>
+                <input id="guesses" v-model="guesses" type="text" class="form-control" aria-describedby="guessHelp">
+                <small id="guessHelp" class="form-text text-muted">
+                    Enter the number of cards your team should try to guess
+                </small>
+            </div>
+            <button @click="sendHint" type="submit" class="btn btn-primary">Send Hint</button>
+        </form>
+        </div>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="hint-notice">
+<div :class="hintClasses" role="alert">
+    <span v-if="game.action == 'hint'">
+        {{ teamCapitalized }} team are waiting for their hint
+    </span>
+    <span v-else>
+        {{ teamCapitalized }} team are playing.
+        The hint is "{{ teamHint }}" and they have
+        {{ teamGuesses }} cards left.
+    </span>
+</div>
+</script>
+
+<script type="text/x-template" id="join-notice">
+<div class="alert alert-secondary" role="alert">
+    <span v-if="enoughplayers">
+        Waiting for administrator to start game
+    </span>
+    <span v-else>
+        Waiting for enough players to join the game
+    </span>
+</div>
+</script>
+
+<script type="text/x-template" id="pass">
+<div class="row">
+    <div class="col-2">
+        <button type="button" @click.prevent="pass" class="btn btn-secondary">
+            Pass turn
+        </button>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="end">
+<div class="alert alert-success" role="alert">
+    <span>
+        {{ winner }} have won the game !
+    </span>
+</div>
+</script>
+
+<script>
+
+var TeamList = {
+    props: ['players'],
+    template: '#team-list',
+}
+
+var MasterList = {
+    props: ['players', 'team'],
+    template: '#master-list',
+    data: function() {
+        return {
+            'master': '',
+        }
+    },
+    computed: {
+        teamCapitalized: function() {
+            var team = this.team.slice()
+            var letter = team[0].toUpperCase()
+            team[0] = letter
+            return team
+        }
+    }
+}
+
+var Cell = {
+    props: ['cell'],
+    template: '#cell',
+    computed: {
+        cellClass: function() {
+            var classes = {
+                'btn': true,
+                'btn-lg': true,
+                'btn-block': true
+            }
+
+            var cardColors = {
+                'blue': 'btn-primary',
+                'red': 'btn-danger',
+                'neutral': 'btn-neutral-picked',
+                'death': 'btn-dark'
+            }
+
+            var tileColors = {
+                'blue': 'btn-outline-primary',
+                'red': 'btn-outline-danger',
+                'death': 'btn-death',
+                'neutral': 'btn-outline-secondary'
+            }
+
+            var className = "btn-outline-secondary"
+
+            if (this.cell.card != null) {
+                className = cardColors[this.cell.card]
+            } else if (this.cell.tile != null) {
+                className = tileColors[this.cell.tile]
+            }
+
+            classes[className] = true
+            return classes
+        }
+    },
+    methods: {
+        guess: function() {
+            vm.guess(this.cell.x, this.cell.y)
+        }
+    }
+}
+
+Vue.component('login', {
+    template: '#login',
+    data: function() {
+        return {
+            team: 'blue',
+            name: ''
+        }
+    },
+    methods: {
+        login: function() {
+            vm.login(this.name,  this.team)
+        }
+    }
+})
+
+Vue.component('master-select', {
+    template: '#master-select',
+    props: ['red', 'blue'],
+    components: {
+        'master-list': MasterList
+    },
+    methods: {
+        start: function() {
+            start = {}
+            for (child of this.$children) {
+                start[child.team] = child.master
+            }
+            vm.start(start.red, start.blue)
+        }
+    }
+})
+
+Vue.component('user-list', {
+    template: '#user-list',
+    props: ['red', 'blue'],
+    components: {
+        'team-list': TeamList
+    }
+})
+
+Vue.component('board', {
+    props: ['board', 'tiles'],
+    template: '#board',
+    data: function() {
+        return {
+        }
+    },
+    computed: {
+        grid: function() {
+            var grid = []
+            for (y of [4, 3, 2, 1, 0]) {
+                var row = []
+                for (x of [0, 1, 2, 3, 4]) {
+                    var cell = {
+                        x: x,
+                        y: y,
+                        word: this.board.words[x][y],
+                        tile: null,
+                        card: this.board.cards[x][y]
+                    }
+                    if (this.tiles != null) {
+                        cell.tile = this.tiles[x][y]
+                    }
+                    row.push(cell)
+                }
+                grid.push(row)
+            }
+            return grid
+        }
+    },
+    components: {
+        'cell': Cell
+    }
+})
+
+Vue.component('hint-box', {
+    template: '#hint-box',
+    data: function() {
+        return {
+            hint: '',
+            guesses: ''
+        }
+    },
+    methods: {
+        sendHint: function() {
+            vm.sendHint(this.hint, this.guesses)
+        }
+    }
+})
+
+Vue.component('join-notice', {
+    template: '#join-notice',
+    props: ['enoughplayers']
+})
+
+Vue.component('hint-notice', {
+    template: '#hint-notice',
+    props: ['game'],
+    computed: {
+        teamHint: function() {
+            return this.game[this.game.turn].hint
+        },
+        teamGuesses: function() {
+            return this.game[this.game.turn].guesses
+        },
+        teamCapitalized: function() {
+            var team = this.game.turn.slice()
+            team[0] = team[0].toUpperCase()
+            return team
+        },
+        hintClasses: function() {
+            return {
+                'alert': true,
+                'alert-info': this.game.turn == "blue",
+                'alert-danger': this.game.turn == "red"
+            }
+        }
+    }
+})
+
+Vue.component('end', {
+    props: ['winner'],
+    template: '#end'
+})
+
+Vue.component('pass', {
+    template: '#pass',
+    methods: {
+        pass: function() {
+            vm.pass()
+        }
+    }
+})
+
+var vm = new Vue({
+  el: '#app',
+  methods: {
+    login: function(name, team) {
+        this.user = {name: name, team: team}
+
+        var backend = "wss://" + window.location.host + "/api"
+        this.socket = new WebSocket(backend)
+
+        this.socket.onopen = function(event) {
+            vm.createOrJoinRoom()
+        }
+        this.socket.onerror = function(event) {
+            console.error("ERROR: ", event)
+            alert('Socket error. Consult logs for details')
+        }
+        this.socket.onmessage = function(event) {
+        console.log("response: " + event.data)
+            var response = JSON.parse(event.data)
+            vm.handleResponse(response)
+        }
+        this.socket.onclose = function(event) {
+            console.log("socket close: ", event)
+            alert('Disconnected from server. Consult logs for details')
+        }
+    },
+    createOrJoinRoom: function() {
+        var roomid = (new URL(window.location)).searchParams.get("roomid")
+        if (roomid == null) {
+            this.sendRequest({request: 'room'})
+        } else {
+            this.roomid = roomid
+            this.sendRequest({'request': 'join', id: roomid})
+        }
+
+        this.sendRequest({
+            request: 'team', 
+            name: this.user.name, 
+            team: this.user.team
+        })
+    },
+    start: function(red, blue) {
+      this.sendRequest({
+          request: 'start',
+          red: red,
+          blue: blue
+      })
+    },
+    guess: function(x, y) {
+        this.sendRequest({
+            request: 'guess',
+            x: parseInt(x),
+            y: parseInt(y)
+        })
+    },
+    pass: function() {
+        this.sendRequest({
+            request: 'pass'
+        })
+    },
+    sendHint: function(hint, guesses) {
+        this.sendRequest({
+            request: 'hint',
+            hint: hint,
+            guesses: parseInt(guesses)
+        })
+    },
+    sendRequest: function(request) {
+        var message = JSON.stringify(request)
+        console.log("request: " + message)
+        this.socket.send(message)
+    },
+    handleResponse: function(response) {
+        if (response.response == 'error') {
+            console.error("ERROR response: " + response.error)
+            alert('ERROR: ' + response.error)
+        } else if (response.response == 'room') {
+            this.roomid = response.id
+            this.admin = true
+        } else if (response.response == 'join') {
+            this.$set(this, 'game', response.game)
+            if (this.state == 'login') {
+                this.state = 'join'
+            }
+        } else if (response.response == 'leave') {
+            this.$set(this, 'game', response.game)
+        } else if (response.response == 'tiles') {
+            this.$set(this, 'tiles', response.tiles)
+        } else if (response.response == 'turn') {
+            this.$set(this, 'game', response.game)
+            if (this.state != 'play') {
+                this.state = 'play'
+            }
+        } else if (response.response == 'hint') {
+            this.$set(this, 'game', response.game)
+        } else if (response.response == 'restart') {
+            this.state = 'join'
+            this.$set(this, 'game', response.game)
+        } else if (response.response == 'end') {
+            this.$set(this, 'game', response.game)
+            this.winner = response.winner
+            this.state = 'end'
+        }
+    }
+  },
+  computed: {
+      showLogin: function() {
+          return this.state == 'login'
+      },
+      showUsers: function() {
+          return this.state == 'join' || this.state == 'play'
+      },
+      showMasterSelect: function() {
+          return this.admin && this.state == 'join' && this.enoughPlayers
+      },
+      showBoard: function() {
+          return this.state == 'play' || this.state == 'end'
+      },
+      showHintNotice: function() {
+          return this.state == 'play'
+      },
+      showJoinNotice: function() {
+          return this.state == 'join'
+      },
+      showHintBox: function() {
+          if (this.state != 'play') {
+              return false
+          }
+
+          return (
+              this.game.turn == this.user.team
+              && this.game.action == 'hint'
+              && this.tiles != null
+          )
+      },
+      showPass: function() {
+          return (
+              this.state == 'play'
+              && this.game.action == 'guess'
+              && this.game.turn == this.user.team
+              && this.tiles == null
+          )
+      },
+      showEnd: function() {
+          return this.state == 'end'
+      },
+      roomUrl: function() {
+          if (this.roomid != null) {
+              var url = new URL(window.location)
+              url.search = "?roomid=" + this.roomid
+              return url.href
+          }
+          return null
+      },
+      enoughPlayers: function() {
+          return this.game.red.players.length >= 2 && this.game.blue.players.length >= 2
+      }
+  },
+  data: {
+      admin: false,
+      state: 'login',
+      user: null,
+      tiles: null,
+      socket: null,
+      winner: null,
+      roomid: null,
+      game: null
+  }
+})
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,21 @@
+version: '3.7'
+services:
+  frontend:
+    build:
+      context: frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./frontend/index.html:/var/www/index.html"
+      - "./frontend/nginx/dev.conf:/etc/nginx/conf.d/default.conf"
+      - "./data/ssl:/etc/ssl"
+  backend:
+    build:
+      context: backend
+    volumes:
+      - "./data/maps:/maps"
+    environment:
+      RUST_LOG: "debug"
