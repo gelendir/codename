@@ -2,6 +2,7 @@ use serde::Serialize as SerdeSerialize;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use crate::request::Hint;
 use crate::team::Team;
+use crate::board::Tile;
 use crate::request;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -107,26 +108,34 @@ impl GameTeam {
         }
     }
 
-    pub fn next_team(&mut self, token: Token, team: Team) -> Result<Team> {
+    pub fn next_team(&mut self, token: Token, tile: Tile) -> Result<Team> {
         self.validate_player(token, false)?;
-
         match self.state {
+            State::Hint => Err(anyhow!("not time to give a hint")),
             State::Guess => {
-                if team == self.team {
-                    self.guesses -= 1;
-                    if self.guesses == 0 {
+                match tile {
+                    Tile::Red if self.team == Team::Red => {
+                        Ok(self.decease_guess())
+                    },
+                    Tile::Blue if self.team == Team::Blue => {
+                        Ok(self.decease_guess())
+                    },
+                    _ => {
                         self.state = State::Hint;
+                        Ok(self.team.opposite())
                     }
-                } else {
-                    self.state = State::Hint;
                 }
-            },
-            State::Hint => return Err(anyhow!("not time to give a hint"))
+            }
         }
+    }
 
-        match self.state {
-            State::Guess => Ok(self.team),
-            State::Hint => Ok(self.team.opposite())
+    pub fn decease_guess(&mut self) -> Team {
+        self.guesses -= 1;
+        if self.guesses == 0 {
+            self.state = State::Hint;
+            self.team.opposite()
+        } else {
+            self.team
         }
     }
 
@@ -147,6 +156,23 @@ impl GameTeam {
                 Some(_) => Ok(()),
                 None => Err(anyhow!("player not found in team"))
             }
+        }
+    }
+
+    pub fn can_guess(&self, token: Token) -> bool {
+        if !self.players.contains_key(&token) {
+            return false
+        }
+
+        if let Some(master) = self.master {
+            if token == master {
+                return false
+            }
+        }
+
+        match self.state {
+            State::Guess => self.guesses > 0,
+            State::Hint => false
         }
     }
 }

@@ -71,8 +71,15 @@ impl Game {
         }
     }
 
-    pub fn add_player(&mut self, token: Token, team: Team, player: String) {
-        self.team_mut(&team).add_player(token, player);
+    pub fn team(&self, team: &Team) -> &GameTeam {
+        match team {
+            Team::Red => &self.red,
+            Team::Blue => &self.blue
+        }
+    }
+
+    pub fn add_player(&mut self, token: Token, team: Team, player: &str) {
+        self.team_mut(&team).add_player(token, player.to_string());
     }
 
     pub fn remove_player(&mut self, token: Token) -> Option<String> {
@@ -87,7 +94,15 @@ impl Game {
         result
     }
 
-    pub fn start(&mut self, token: Token, start: request::Start) -> Result<()> {
+    pub fn nb_players(&self) -> usize {
+        self.red.nb_players() + self.blue.nb_players()
+    }
+
+    pub fn tokens(&self) -> impl Iterator<Item = &Token> {
+        self.red.players.keys().chain(self.blue.players.keys())
+    }
+
+    pub fn start(&mut self, token: Token, start: &request::Start) -> Result<()> {
         if token != self.admin {
             return Err(anyhow!("you are not the admin"));
         }
@@ -131,22 +146,18 @@ impl Game {
     pub fn guess(&mut self, token: Token, guess: &request::Guess) -> Result<()> {
         match self.state {
             State::Play(team) => {
+                if !self.team(&team).can_guess(token) {
+                    return Err(anyhow!("Not your turn to guess"))
+                }
+
                 let tile = self.board.put_card(guess.x, guess.y);
                 let gameteam = self.team_mut(&team);
-
                 log::debug!("tile: {:?} team: {:?} gameteam: {:?}", tile, team, gameteam);
 
                 match tile {
-                    Tile::Blue => {
-                        let next_team = gameteam.next_team(token, Team::Blue)?;
+                    Tile::Blue | Tile::Red | Tile::Neutral => {
+                        let next_team = gameteam.next_team(token, tile)?;
                         self.state = State::Play(next_team);
-                    }
-                    Tile::Red => {
-                        let next_team = gameteam.next_team(token, Team::Red)?;
-                        self.state = State::Play(next_team);
-                    },
-                    Tile::Neutral => {
-                        self.state = State::Play(team.opposite())
                     },
                     Tile::Death => {
                         self.state = State::End(team.opposite())
