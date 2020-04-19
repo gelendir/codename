@@ -5,84 +5,114 @@ use tungstenite::server::accept;
 use tungstenite::Message as WsMessage;
 use tungstenite::error::Error as WsError;
 use crate::request::Request;
-use std::io;
-use std::error;
-use std::fmt;
 use anyhow;
+use uuid::Uuid;
+use std::io;
 
-#[derive(Debug)]
-pub struct Connection {
+pub enum Stream {
+    Tcp(TcpStream),
+    Ws(WebSocket<TcpStream>)
+}
+
+pub struct Client {
     pub token: Token,
-    pub ws: WebSocket<TcpStream>,
+    stream: Stream,
+    id: Option<Uuid>,
+    responses: Vec<WsMessage>,
 }
 
 #[derive(Debug)]
-pub enum Error {
-    Close(Token),
-    ParseError(anyhow::Error)
+pub struct Requests {
+    pub id: Uuid,
+    pub token: Token,
+    pub requests: Vec<Request>
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::Close(t) => write!(f, "Connection {} closed", t.0),
-            Error::ParseError(e) => write!(f, "Request parse error : {}", e)
+impl Client {
+
+    pub fn new(token: Token, stream: TcpStream) -> Client {
+        Client {
+            token: token,
+            stream: Stream::Tcp(stream),
+            id: None,
+            responses: Vec::new(),
         }
     }
-}
 
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        None
-    }
-}
-
-impl Connection {
-
-    pub fn accept(token: Token, stream: TcpStream) -> anyhow::Result<Connection> {
-        let ws = accept(stream)?;
-        log::debug!("accept: {} {:?}", token.0, ws);
-
-        Ok(Connection{
-            token: token,
-            ws: ws,
-        })
-    }
-
-    pub fn read(&mut self) -> Result<Option<Request>, Error> {
-        match self.ws.read_message() {
-            Ok(result) => {
-                match result {
-                    WsMessage::Text(msg) => {
-                        match Request::from_str(&msg) {
-                            Ok(request) => Ok(Some(request)),
-                            Err(e) => Err(Error::ParseError(e))
-                        }
-                    },
-                    WsMessage::Close(_) => {
-                        Err(Error::Close(self.token))
-                    }
-                    _ => Ok(None)
-                }
+    pub fn read(&mut self) -> anyhow::Result<Option<Requests>> {
+        match &mut self.stream {
+            Stream::Tcp(s) => {
+                self.stream = Stream::Ws(accept(s)?);
+                Ok(None)
             },
-            Err(error) => {
-                match error {
-                    WsError::Io(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                        Ok(None)
-                    },
-                    e => {
-                        log::error!("websocket error: {}", e);
-                        Err(Error::Close(self.token))
-                    }
+            Stream::Ws(mut ws) => {
+                if let Some(id) = self.id {
+                    let requests = Self::read_requests(&mut ws)?;
+                    Ok(Some(Requests{
+                        id: id.clone(),
+                        token: self.token,
+                        requests: requests
+                    }))
+                } else {
+                    self.id = Some(Self::accept_websocket(&mut ws)?);
+                    Ok(None)
                 }
             }
         }
     }
 
-    pub fn send(&mut self, response: WsMessage) -> anyhow::Result<()> {
-        log::debug!("response: {} {}", self.token.0, response);
-        self.ws.write_message(response)?;
+    fn accept_socket(&self, stream: TcpStream) -> anyhow::Result<WebSocket<TcpStream>> {
+        let ws = accept(stream)?;
+        Ok(ws)
+    }
+
+    fn accept_websocket(ws: &mut WebSocket<TcpStream>) -> anyhow::Result<Uuid> {
+        match Self::read_request(ws)? {
+            Some(request) => match request {
+                Request::Room(_) => {
+                    let id = Uuid::new_v4();
+                    Ok(id)
+                },
+                Request::Join(j) => {
+                    Ok(j.id)
+                },
+                _ => {
+                    Err(anyhow::Error::new(WsError::ConnectionClosed))
+                }
+            },
+            None => Err(anyhow::Error::new(WsError::ConnectionClosed))
+        }
+    }
+
+    fn read_requests(ws: &mut WebSocket<TcpStream>) -> anyhow::Result<Vec<Request>> {
+        let mut requests = Vec::new();
+        while let Some(request) = Self::read_request(ws)? {
+            requests.push(request);
+        }
+        Ok(requests)
+    }
+
+    pub fn push(&mut self, response: WsMessage) {
+        self.responses.push(response);
+    }
+
+    pub fn flush(&mut self) -> anyhow::Result<()> {
+        match &mut self.stream {
+            Stream::Tcp(_) => {},
+            Stream::Ws(ws) => {
+                for message in self.responses.drain(..) {
+                    ws.write_message(message)?;
+                }
+            }
+        }
         Ok(())
+    }
+
+    pub fn mut_socket(&mut self) -> &mut TcpStream {
+        match &mut self.stream {
+            Stream::Tcp(s) => s,
+            Stream::Ws(ws) => ws.get_mut()
+        }
     }
 
 }

@@ -1,21 +1,18 @@
-use mio::Token;
-use mio::Poll;
-use crate::request::Request;
-use crate::response;
-use crate::connection::Connection;
-use crate::connection;
 use crate::board::BoardSet;
 use crate::room::Room;
-use mio::net::TcpStream;
+use crate::request::Request;
+use crate::response;
+use crate::stream::{Stream, Event};
 use anyhow::Result;
 use uuid::Uuid;
+use mio::Token;
 use std::collections::HashMap;
 
 
+
 pub struct Server {
-    sockets: HashMap<Token, TcpStream>,
-    connections: HashMap<Token, Connection>,
-    sessions: HashMap<Token, Uuid>,
+    stream: Stream,
+    players: HashMap<Token, Uuid>,
     rooms: HashMap<Uuid, Room>,
     boardset: BoardSet,
 }
@@ -23,138 +20,92 @@ pub struct Server {
 
 impl Server {
 
-    pub fn new(boardset: BoardSet) -> Server {
+    pub fn new(boardset: BoardSet, stream: Stream) -> Server {
         Server {
-            sockets: HashMap::new(),
-            connections: HashMap::new(),
-            sessions: HashMap::new(),
-            rooms: HashMap::new(),
             boardset: boardset,
+            stream: stream,
+            players: HashMap::new(),
+            rooms: HashMap::new(),
         }
     }
 
-    pub fn new_conn(&mut self, token: Token, stream: TcpStream) {
-        self.sockets.insert(token, stream);
-    }
-
-    pub fn process(&mut self, token: Token, poll: &mut Poll) -> Result<()> {
-        if let Err(error) = self.handle(token) {
-            if let Some(e) = error.downcast_ref::<connection::Error>() {
-                if let connection::Error::Close(t) = e {
-                    self.remove_conn(*t, poll)?;
+    pub fn run(&mut self) -> Result<()> {
+        loop {
+            for event in self.stream.poll()? {
+                log::debug!("handling event: {:?}", event);
+                match event {
+                    Event::Close(token) => self.remove_player(token),
+                    Event::Request(token, request) => self.handle_request(token, request),
+                    Event::Error(token, error) => {
+                        let response = response::error(&format!("{}", error));
+                        self.stream.push(token, response)
+                    }
                 }
-            } else {
-                return Err(error);
             }
         }
-        Ok(())
     }
 
-    pub fn handle(&mut self, token: Token) -> Result<()> {
-        if let Some(socket) = self.sockets.remove(&token) {
-            self.handle_socket(token, socket)?;
-        } else if let Some(conn) = self.connections.remove(&token) {
-            self.handle_connection(token, conn)?;
-        } else if let Some(id) = self.sessions.get(&token) {
+    fn remove_player(&mut self, token: Token) {
+        if let Some(id) = self.players.remove(&token) {
+
+            let mut alive = true;
+            if let Some(room) = self.rooms.get_mut(&id) {
+                self.stream.append(
+                    room.remove_player(token)
+                );
+                alive = room.is_alive(token)
+            }
+
+            if !alive {
+                if let Some(room) = self.rooms.remove(&id) {
+                    for token in room.game.tokens() {
+                        self.stream.remove(*token)
+                    }
+                }
+            }
+        }
+    }
+    
+    fn handle_request(&mut self, token: Token, request: Request) {
+        if self.players.contains_key(&token) {
+            self.handle_room(token, &request);
+        } else {
+            self.handle_client(token, &request);
+        }
+    }
+
+    fn handle_room(&mut self, token: Token, request: &Request) {
+        if let Some(id) = self.players.get(&token) {
             if let Some(room) = self.rooms.get_mut(id) {
-                room.handle(token)?;
+                log::debug!("handle room: {:?} {:?}", token, request);
+                let responses = room.handle(token, &request);
+                self.stream.append(responses);
             }
         }
-        Ok(())
     }
 
-    fn handle_socket(&mut self, token: Token, socket: TcpStream) -> Result<()> {
-        let conn = Connection::accept(token, socket)?;
-        self.connections.insert(token, conn);
-        Ok(())
-    }
-
-    fn handle_connection(&mut self, token: Token, mut conn: Connection) -> Result<()> {
-        match conn.read() {
-            Ok(Some(request)) => self.handle_request(token, conn, request)?,
-            Ok(None) => {},
-            Err(e) => {
-                let msg = format!("{}", e);
-                let response = response::error(&msg);
-                conn.send(response)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn handle_request(&mut self, token: Token, mut conn: Connection, req: Request) -> Result<()> {
-        match &req {
-            Request::Room(_) => {
-                let board = self.boardset.new_board();
-
-                let mut room = Room::new(board, token);
-                let id = room.id;
-                log::info!("{} - room created", room.id);
-
-                room.add_conn(token, conn);
-                self.sessions.insert(token, room.id);
-                self.rooms.insert(room.id, room);
-
-                if let Some(room) = self.rooms.get_mut(&id) {
-                    room.room_response()?;
-                    room.handle(token)?;
-                }
-            },
-            Request::Join(j) => {
-                if let Some(room) = self.rooms.get_mut(&j.id) {
-                    log::info!("{} - new connection", room.id);
-                    self.sessions.insert(token, room.id);
-                    room.add_conn(token, conn);
-                    room.handle(token)?;
-                }
+    fn handle_client(&mut self, token: Token, request: &Request) {
+        log::debug!("handle client: {:?} {:?}", token, request);
+        match &request {
+            Request::Room(_) => self.new_room(token, &request),
+            Request::Join(j) if self.rooms.contains_key(&j.id) => {
+                self.players.insert(token, j.id);
             },
             _ => {
-                let response = response::error("expected room or join request");
-                conn.send(response)?;
+                let msg = format!("invalid request. Expecting room or join");
+                self.stream.push(token, response::error(&msg));
             }
         }
-        Ok(())
     }
 
-    pub fn remove_conn(&mut self, token: Token, poll: &mut Poll) -> Result<()> {
-        if let Some(mut stream) = self.sockets.remove(&token) {
+    fn new_room(&mut self, token: Token, request: &Request) {
+        log::debug!("new room: {:?} {:?}", token, request);
+        let id = Uuid::new_v4();
+        self.players.insert(token, id);
 
-            log::debug!("removing socket {:?}", token);
-            poll.registry().deregister(&mut stream)?;
+        let room = Room::new(id, self.boardset.new_board(), token);
+        self.stream.append(room.broadcast_room());
 
-        } else if let Some(mut conn) = self.connections.remove(&token) {
-
-            log::debug!("removing ws {:?}", conn);
-            poll.registry().deregister(conn.ws.get_mut())?;
-
-        } else if let Some(id) = self.sessions.remove(&token) {
-            if let Some(mut room) = self.remove_room(poll, id, token)? {
-                log::info!("{} - room closed due to master leaving", room.id);
-                for conn in room.connections.values_mut() {
-                    log::debug!("removing conn {:?}", conn);
-                    poll.registry().deregister(conn.ws.get_mut())?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn remove_room(&mut self, poll: &mut Poll, id: Uuid, token: Token) -> Result<Option<Room>> {
-        let remove = if let Some(room) = self.rooms.get_mut(&id) {
-            if let Some((player, mut conn)) = room.remove_conn(token) {
-                poll.registry().deregister(conn.ws.get_mut())?;
-                room.remove_response(player)?;
-            }
-            room.len() == 0 || token == room.game.admin
-        } else {
-            false
-        };
-
-        if remove {
-            log::info!("{} - room closed due to being empty", id);
-            Ok(self.rooms.remove(&id))
-        } else {
-            Ok(None)
-        }
+        self.rooms.insert(id, room);
     }
 }
