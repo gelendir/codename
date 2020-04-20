@@ -9,7 +9,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - "./frontend/index.html:/var/www/index.html"
+      - "./frontend/index.html:/var/www/codename/index.html"
       - "./frontend/nginx/dev.conf:/etc/nginx/conf.d/default.conf"
       - "./data/ssl:/etc/ssl"
   backend:

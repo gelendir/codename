@@ -16,6 +16,10 @@
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
 
     <style>
+        .cell {
+            text-transform: capitalize;
+        }
+
         .gridrow {
             margin-top: .5rem; 
             margin-bottom: .5rem;
@@ -31,6 +35,18 @@
             background-color: #8e8e8e;
             border-color: #343a40;
             color: #fff;
+        }
+
+        .btn-red {
+            background-color: #f8d7da;
+            border-color: #f8d7da;
+            color: #000;
+        }
+
+        .btn-blue {
+            background-color: #d1ecf1;
+            border-color: #d1ecf1;
+            color: #000;
         }
     </style>
 </head>
@@ -273,8 +289,8 @@
     </span>
     <span v-else>
         {{ teamCapitalized }} team are playing.
-        The hint is "{{ teamHint }}" and they have
-        {{ teamGuesses }} cards left.
+        The hint is "{{ teamHint }}" for {{ teamGuesses }} guesses.
+        <span v-if="previous != null">(previous hint: {{ previous }})</span>
     </span>
 </div>
 </script>
@@ -339,6 +355,7 @@ var Cell = {
     computed: {
         cellClass: function() {
             var classes = {
+                'cell': true,
                 'btn': true,
                 'btn-lg': true,
                 'btn-block': true
@@ -352,8 +369,8 @@ var Cell = {
             }
 
             var tileColors = {
-                'blue': 'btn-outline-primary',
-                'red': 'btn-outline-danger',
+                'blue': 'btn-blue',
+                'red': 'btn-red',
                 'death': 'btn-death',
                 'neutral': 'btn-outline-secondary'
             }
@@ -437,6 +454,7 @@ Vue.component('board', {
                         tile: null,
                         card: this.board.cards[x][y]
                     }
+
                     if (this.tiles != null) {
                         cell.tile = this.tiles[x][y]
                     }
@@ -493,6 +511,9 @@ Vue.component('hint-notice', {
                 'alert-info': this.game.turn == "blue",
                 'alert-danger': this.game.turn == "red"
             }
+        },
+        previous: function() {
+            return this.game[this.game.turn].previous
         }
     }
 })
