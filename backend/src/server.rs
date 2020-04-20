@@ -37,7 +37,7 @@ impl Server {
                     Event::Close(token) => self.remove_player(token),
                     Event::Request(token, request) => self.handle_request(token, request),
                     Event::Error(token, error) => {
-                        let response = response::error(&format!("{}", error));
+                        let response = response::error(&error);
                         self.stream.push(token, response)
                     }
                 }

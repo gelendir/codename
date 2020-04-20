@@ -1,8 +1,9 @@
 use crate::idgenerator::IdGenerator;
 use crate::request::Request;
+use crate::error::RequestError;
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Token};
-use anyhow::{Result, Error};
+use anyhow::Result;
 use std::collections::HashMap;
 use tungstenite::{WebSocket, Message, accept};
 use tungstenite::Error as WsError;
@@ -24,7 +25,7 @@ pub struct Stream {
 pub enum Event {
     Close(Token),
     Request(Token, Request),
-    Error(Token, Error)
+    Error(Token, String)
 }
 
 impl Stream {
@@ -101,7 +102,9 @@ impl Stream {
                 Err(error) => {
                     if let Some(_) = error.downcast_ref::<WsError>() {
                         self.remove(token);
-                        self.events.push(Event::Close(token))
+                        self.events.push(Event::Close(token));
+                    } else if let Some(e) = error.downcast_ref::<RequestError>() {
+                        self.events.push(Event::Error(token, e.msg.clone()));
                     } else {
                         return Err(error)
                     }
@@ -118,10 +121,8 @@ impl Stream {
         }
 
         if let Some(ws) = self.ws.get_mut(&token) {
-            match Self::read_request(ws) {
-                Ok(Some(request)) => return Ok(Some(Event::Request(token, request))),
-                Err(error) => return Ok(Some(Event::Error(token, error))),
-                _ => {}
+            if let Some(request) = Self::read_request(ws)? {
+                return Ok(Some(Event::Request(token, request)));
             }
         }
 

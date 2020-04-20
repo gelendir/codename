@@ -4,7 +4,7 @@ use serde_json;
 
 #[derive(Debug)]
 pub struct RequestError {
-    msg: String
+    pub msg: String
 }
 
 impl fmt::Display for RequestError {
