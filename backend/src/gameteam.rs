@@ -21,6 +21,7 @@ pub struct GameTeam {
     pub team: Team,
     pub guesses: u8,
     pub hint: String,
+    pub previous: Option<String>,
     pub players: HashMap<Token, String>,
     pub state: State,
     pub master: Option<Token>,
@@ -38,10 +39,11 @@ impl Serialize for GameTeam {
             None
         };
 
-        let mut s = serializer.serialize_struct("GameTeam", 4)?;
+        let mut s = serializer.serialize_struct("GameTeam", 5)?;
         s.serialize_field("master", &master)?;
         s.serialize_field("hint", &self.hint)?;
         s.serialize_field("guesses", &self.guesses)?;
+        s.serialize_field("previous", &self.previous)?;
         s.serialize_field("players", &players)?;
         s.end()
     }
@@ -55,6 +57,7 @@ impl GameTeam {
             master: None,
             hint: String::new(),
             guesses: 0,
+            previous: None,
             state: State::Hint,
             players: HashMap::new()
         }
@@ -90,35 +93,37 @@ impl GameTeam {
         Ok(())
     }
 
-    pub fn give_hint(&mut self, token: Token, hint: &Hint, cards_left: u8) -> Result<()> {
+    pub fn give_hint(&mut self, token: Token, hint: &Hint) -> Result<()> {
         self.validate_player(token, true)?;
 
-        self.hint = hint.hint.clone();
-
         match self.state {
+            State::Guess => Err(anyhow!("not time to give a hint")),
             State::Hint => {
-                if self.guesses + hint.guesses > cards_left {
-                    return Err(anyhow!("guesses higher than cards left"));
+                if self.guesses > 0 || self.previous.is_some() {
+                    self.previous = Some(self.hint.clone());
                 }
-                self.guesses += hint.guesses;
+
+                self.hint = hint.hint.clone();
+                self.guesses = hint.guesses;
                 self.state = State::Guess;
+
                 Ok(())
-            },
-            State::Guess => Err(anyhow!("not time to give a hint"))
+            }
         }
     }
 
     pub fn next_team(&mut self, token: Token, tile: Tile) -> Result<Team> {
         self.validate_player(token, false)?;
+
         match self.state {
             State::Hint => Err(anyhow!("not time to give a hint")),
             State::Guess => {
                 match tile {
                     Tile::Red if self.team == Team::Red => {
-                        Ok(self.decease_guess())
+                        Ok(self.decrease_guess())
                     },
                     Tile::Blue if self.team == Team::Blue => {
-                        Ok(self.decease_guess())
+                        Ok(self.decrease_guess())
                     },
                     _ => {
                         self.state = State::Hint;
@@ -129,13 +134,18 @@ impl GameTeam {
         }
     }
 
-    pub fn decease_guess(&mut self) -> Team {
-        self.guesses -= 1;
-        if self.guesses == 0 {
+    pub fn decrease_guess(&mut self) -> Team {
+        if self.guesses > 0 {
+            self.guesses -= 1;
+        } else {
+            self.previous = None;
+        }
+
+        if self.guesses > 0 || self.previous.is_some() {
+            self.team
+        } else {
             self.state = State::Hint;
             self.team.opposite()
-        } else {
-            self.team
         }
     }
 
@@ -171,7 +181,7 @@ impl GameTeam {
         }
 
         match self.state {
-            State::Guess => self.guesses > 0,
+            State::Guess => self.guesses > 0 || self.previous.is_some(),
             State::Hint => false
         }
     }

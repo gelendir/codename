@@ -130,9 +130,8 @@ impl Game {
     pub fn hint(&mut self, token: Token, hint: &request::Hint) -> Result<()> {
         match self.state {
             State::Play(team) => {
-                let cards_left = self.board.cards_left(&team);
                 let gameteam = self.team_mut(&team);
-                gameteam.give_hint(token, &hint, cards_left)?;
+                gameteam.give_hint(token, &hint)?;
                 log::debug!("gave hint: {:?}", gameteam);
             },
             _ => {

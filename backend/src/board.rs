@@ -137,11 +137,6 @@ impl Board {
         self.tiles[x][y].clone()
     }
 
-    pub fn cards_left(&self, team: &Team) -> u8 {
-        let (tiles, cards) = self.count_cards(team);
-        tiles - cards
-    }
-
     pub fn winner(&self) -> Option<Team> {
         let (blue_tiles, blue_cards) = self.count_cards(&Team::Blue);
         if blue_tiles == blue_cards {
