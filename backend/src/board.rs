@@ -3,10 +3,9 @@ use serde::Deserialize as SerdeDeserialize;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use std::fs::File;
 use std::io::prelude::*;
+use std::io::Error;
 use rand::prelude::*;
 use crate::team::Team;
-use anyhow::Result;
-use std::result;
 
 
 pub type WordMap = [ [String; 5]; 5];
@@ -36,7 +35,7 @@ pub struct Board {
 }
 
 impl Serialize for Board {
-    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -60,7 +59,7 @@ impl Serialize for Board {
     }
 }
 
-pub fn load_board_file(path: &str) -> Result<BoardSet> {
+pub fn load_board_file(path: &str) -> Result<BoardSet, Error> {
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;

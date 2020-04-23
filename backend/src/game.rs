@@ -4,9 +4,11 @@ use crate::board::Board;
 use crate::board::Tile;
 use crate::team::Team;
 use crate::gameteam::GameTeam;
-use anyhow::{Result, anyhow};
+use crate::error::GameError;
 use mio::Token;
 use std::result;
+
+type Result<T> = result::Result<T, GameError>;
 
 
 #[derive(Debug)]
@@ -104,15 +106,15 @@ impl Game {
 
     pub fn start(&mut self, token: Token, start: &request::Start) -> Result<()> {
         if token != self.admin {
-            return Err(anyhow!("you are not the admin"));
+            return Err(GameError::NotAdmin)
         }
 
         if self.blue.nb_players() < 2 {
-            return Err(anyhow!("blue team needs at least 2 players"));
+            return Err(GameError::MissingPlayers("blue"))
         }
 
         if self.red.nb_players() < 2 {
-            return Err(anyhow!("blue team needs at least 2 players"));
+            return Err(GameError::MissingPlayers("red"))
         }
 
         match self.state {
@@ -121,7 +123,7 @@ impl Game {
                 self.blue.set_master(&start)?;
                 self.state = State::Play(self.board.start_team());
             }
-            _ => return Err(anyhow!("game already started"))
+            _ => return Err(GameError::AlreadyStarted)
         }
 
         Ok(())
@@ -135,7 +137,7 @@ impl Game {
                 log::debug!("gave hint: {:?}", gameteam);
             },
             _ => {
-                return Err(anyhow!("not your turn to give a hint"));
+                return Err(GameError::Turn("hint"))
             }
         }
 
@@ -146,7 +148,7 @@ impl Game {
         match self.state {
             State::Play(team) => {
                 if !self.team(&team).can_guess(token) {
-                    return Err(anyhow!("Not your turn to guess"))
+                    return Err(GameError::Turn("guess"))
                 }
 
                 let tile = self.board.put_card(guess.x, guess.y);
@@ -163,7 +165,7 @@ impl Game {
                     }
                 }
             },
-            _ => return Err(anyhow!("game not started"))
+            _ => return Err(GameError::NotStarted)
         }
 
         if let Some(winner) = self.board.winner() {
@@ -179,7 +181,7 @@ impl Game {
                 self.team_mut(&team).pass(token)?;
                 self.state = State::Play(team.opposite())
             },
-            _ => return Err(anyhow!("game not started"))
+            _ => return Err(GameError::NotStarted)
         }
         Ok(())
     }

@@ -1,51 +1,32 @@
-use std::fmt;
-use std::error::Error;
-use serde_json;
+use thiserror::Error;
+use serde_json::error::Error as SerdeError;
 
-#[derive(Debug)]
-pub struct RequestError {
-    pub msg: String
+#[derive(Error, Debug)]
+pub enum RequestError {
+    #[error("parse error: {0}")]
+    Parse(#[from] SerdeError),
+    #[error("field missing: {0}")]
+    Missing(&'static str),
+    #[error("unknown request: {0}")]
+    Unknown(String),
+    #[error("invalid value: {0}")]
+    Invalid(&'static str),
 }
 
-impl fmt::Display for RequestError {
-
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "request error: {}", self.msg)
-    }
-
-}
-
-impl Error for RequestError {
-    fn description(&self) -> &str {
-        "request error"
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
-        None
-    }
-}
-
-
-impl RequestError {
-
-    pub fn new(msg: String) -> RequestError {
-        RequestError {
-            msg: msg
-        }
-    }
-
-    pub fn str(msg: &str) -> RequestError {
-        RequestError {
-            msg: msg.to_string()
-        }
-    }
-
-}
-
-impl From<serde_json::error::Error> for RequestError {
-
-   fn from(e: serde_json::error::Error) -> Self {
-       RequestError::new(format!("parse error: {}", e))
-   }
-
+#[derive(Error, Debug)]
+pub enum GameError {
+    #[error("{0} not found")]
+    NotFound(&'static str),
+    #[error("not your turn to give a {0}")]
+    Turn(&'static str),
+    #[error("player is not a master")]
+    NotMaster,
+    #[error("player is not the admin")]
+    NotAdmin,
+    #[error("team {0} does not have enough players")]
+    MissingPlayers(&'static str),
+    #[error("game has not started")]
+    NotStarted,
+    #[error("game has already started")]
+    AlreadyStarted,
 }

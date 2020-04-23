@@ -3,11 +3,10 @@ use crate::room::Room;
 use crate::request::Request;
 use crate::response;
 use crate::stream::{Stream, Event};
-use anyhow::Result;
 use uuid::Uuid;
 use mio::Token;
 use std::collections::HashMap;
-
+use std::error::Error;
 
 
 pub struct Server {
@@ -29,15 +28,15 @@ impl Server {
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             for event in self.stream.poll()? {
                 log::debug!("handling event: {:?}", event);
                 match event {
-                    Event::Close(token) => self.remove_player(token),
                     Event::Request(token, request) => self.handle_request(token, request),
+                    Event::Close(token) => self.remove_player(token),
                     Event::Error(token, error) => {
-                        let response = response::error(&error);
+                        let response = response::error(&error.to_string());
                         self.stream.push(token, response)
                     }
                 }
@@ -48,15 +47,16 @@ impl Server {
     fn remove_player(&mut self, token: Token) {
         if let Some(id) = self.players.remove(&token) {
 
-            let mut alive = true;
-            if let Some(room) = self.rooms.get_mut(&id) {
+            let remove = if let Some(room) = self.rooms.get_mut(&id) {
                 self.stream.append(
                     room.remove_player(token)
                 );
-                alive = room.is_alive(token)
-            }
+                !room.is_alive(token) 
+            } else {
+                false
+            };
 
-            if !alive {
+            if remove {
                 if let Some(room) = self.rooms.remove(&id) {
                     for token in room.game.tokens() {
                         self.stream.remove(*token)
@@ -92,8 +92,8 @@ impl Server {
                 self.players.insert(token, j.id);
             },
             _ => {
-                let msg = format!("invalid request. Expecting room or join");
-                self.stream.push(token, response::error(&msg));
+                let msg = "invalid request. Expecting room or join";
+                self.stream.push(token, response::error(msg));
             }
         }
     }

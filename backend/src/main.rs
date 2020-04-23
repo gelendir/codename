@@ -12,7 +12,6 @@ mod error;
 
 extern crate log;
 
-use anyhow::Result;
 use mio::net::TcpListener;
 use std::error::Error;
 use std::env;

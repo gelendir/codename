@@ -58,23 +58,23 @@ impl Request {
         log::debug!("request parse: {}", text);
         let data: Value = serde_json::from_str(text)?;
 
-        let request = match data.get("request") {
-            Some(Value::String(s)) => s,
-            _ => return Err(RequestError::str("field request missing"))
-        };
+        let result = data.get("request").ok_or(RequestError::Missing("request"))?;
 
-        match request.as_str() {
-            "room" => Room::parse(data),
-            "join" => Join::parse(data),
-            "team" => Team::parse(data),
-            "start" => Start::parse(data),
-            "hint" => Hint::parse(data),
-            "guess" => Guess::parse(data),
-            "pass" => Pass::parse(data),
-            e => Err(RequestError::new(format!("unknown request: {}", e)))
+        if let Value::String(request) = result {
+            match request.as_str() {
+                "room" => Room::parse(data),
+                "join" => Join::parse(data),
+                "team" => Team::parse(data),
+                "start" => Start::parse(data),
+                "hint" => Hint::parse(data),
+                "guess" => Guess::parse(data),
+                "pass" => Pass::parse(data),
+                _ => Err(RequestError::Unknown(request.clone()))
+            }
+        } else {
+            Err(RequestError::Missing("request"))
         }
     }
-
 }
 
 impl Room {
@@ -101,7 +101,7 @@ impl Team {
     pub fn parse(data: Value) -> Result<Request, RequestError> {
         let team: Team = serde_json::from_value(data)?;
         if team.name == "" {
-            return Err(RequestError::str("name empty"));
+            return Err(RequestError::Missing("name"))
         }
         Ok(Request::Team(team))
     }
@@ -114,10 +114,10 @@ impl Start {
         let start: Start = serde_json::from_value(data)?;
 
         if start.blue == "" {
-            return Err(RequestError::str("blue empty"));
+            return Err(RequestError::Missing("blue"));
         }
         if start.red == "" {
-            return Err(RequestError::str("red empty"));
+            return Err(RequestError::Missing("red"));
         }
 
         Ok(Request::Start(start))
@@ -138,11 +138,11 @@ impl Hint {
         let hint: Hint = serde_json::from_value(data)?;
 
         if hint.hint == "" {
-            return Err(RequestError::str("hint empty"));
+            return Err(RequestError::Missing("hint"));
         }
 
         if !(hint.guesses >= 1 && hint.guesses <= 9) {
-            return Err(RequestError::str("guesses must be between 1 and 9"));
+            return Err(RequestError::Invalid("guesses must be between 1 and 9"));
         }
 
         Ok(Request::Hint(hint))
@@ -156,11 +156,11 @@ impl Guess {
         let guess: Guess = serde_json::from_value(data)?;
 
         if guess.x > 4 {
-            return Err(RequestError::str("x must be between 0 and 4"));
+            return Err(RequestError::Invalid("x must be between 0 and 4"));
         }
 
         if guess.y > 4 {
-            return Err(RequestError::str("y must be between 0 and 4"));
+            return Err(RequestError::Invalid("y must be between 0 and 4"));
         }
 
         Ok(Request::Guess(guess))

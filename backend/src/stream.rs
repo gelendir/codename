@@ -3,7 +3,6 @@ use crate::request::Request;
 use crate::error::RequestError;
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Token};
-use anyhow::Result;
 use std::collections::HashMap;
 use tungstenite::{WebSocket, Message, accept};
 use tungstenite::Error as WsError;
@@ -23,14 +22,14 @@ pub struct Stream {
 
 #[derive(Debug)]
 pub enum Event {
-    Close(Token),
     Request(Token, Request),
-    Error(Token, String)
+    Error(Token, RequestError),
+    Close(Token),
 }
 
 impl Stream {
 
-    pub fn new(listener: TcpListener) -> Result<Stream> {
+    pub fn new(listener: TcpListener) -> io::Result<Stream> {
         let mut stream = Stream {
             listener: listener,
             sockets: HashMap::new(),
@@ -45,13 +44,13 @@ impl Stream {
         Ok(stream)
     }
 
-    fn init(&mut self) -> Result<()> {
+    fn init(&mut self) -> io::Result<()> {
         self.poll.registry()
             .register(&mut self.listener, LISTENER, Interest::READABLE)?;
         Ok(())
     }
 
-    pub fn poll(&mut self) -> Result<Vec<Event>> {
+    pub fn poll(&mut self) -> io::Result<Vec<Event>> {
         self.reregister()?;
 
         let mut events = Events::with_capacity(128);
@@ -66,7 +65,7 @@ impl Stream {
             if token == LISTENER {
                 self.register()?;
             } else if event.is_readable() {
-                self.read(token)?;
+                self.read(token);
             } else if event.is_writable() {
                 self.write(token)?;
             }
@@ -75,7 +74,7 @@ impl Stream {
         Ok(self.events.drain(..).collect())
     }
 
-    pub fn register(&mut self) -> Result<()> {
+    pub fn register(&mut self) -> io::Result<()> {
         let (mut sock, _) = self.listener.accept()?;
         let token = Token(self.generator.next());
 
@@ -85,7 +84,7 @@ impl Stream {
         Ok(())
     }
 
-    pub fn reregister(&mut self) -> Result<()> {
+    pub fn reregister(&mut self) -> io::Result<()> {
         for (token, _) in self.responses.iter() {
             if let Some(ws) = self.ws.get_mut(&token) {
                 self.poll.registry().reregister(ws.get_mut(), *token, Interest::READABLE | Interest::WRITABLE)?;
@@ -94,39 +93,43 @@ impl Stream {
         Ok(())
     }
 
-    fn read(&mut self, token: Token) -> Result<()> {
+    fn read(&mut self, token: Token) {
         loop {
-            match self.read_event(token) {
-                Ok(None) => return Ok(()),
-                Ok(Some(event)) => self.events.push(event),
-                Err(error) => {
-                    if let Some(_) = error.downcast_ref::<WsError>() {
-                        self.remove(token);
-                        self.events.push(Event::Close(token));
-                    } else if let Some(e) = error.downcast_ref::<RequestError>() {
-                        self.events.push(Event::Error(token, e.msg.clone()));
-                    } else {
-                        return Err(error)
+            self.read_event(token)
+        }
+    }
+
+    fn read_event(&mut self, token: Token) {
+        if let Some(stream) = self.sockets.remove(&token) {
+            if let Ok(ws) = accept(stream) {
+                self.ws.insert(token, ws);
+            } else {
+                self.remove(token)
+            }
+        }
+
+        if let Some(ws) = self.ws.get_mut(&token) {
+            match ws.read_message() {
+                Ok(message) => match message {
+                    Message::Text(msg) => {
+                        match Request::from_str(&msg) {
+                            Ok(request) => self.events.push(Event::Request(token, request)),
+                            Err(error) => self.events.push(Event::Error(token, error))
+                        }
+                    },
+                    Message::Close(_) => self.events.push(Event::Close(token)),
+                    _ => {}
+                },
+                Err(error) => match error {
+                    WsError::Io(e) if e.kind() != io::ErrorKind::WouldBlock => {
+                        self.events.push(Event::Close(token))
+                    },
+                    _ => {
+                        self.events.push(Event::Close(token))
                     }
                 }
             }
         }
-    }
-
-    fn read_event(&mut self, token: Token) -> Result<Option<Event>> {
-        if let Some(stream) = self.sockets.remove(&token) {
-            let ws = accept(stream)?;
-            self.ws.insert(token, ws);
-            return Ok(None);
-        }
-
-        if let Some(ws) = self.ws.get_mut(&token) {
-            if let Some(request) = Self::read_request(ws)? {
-                return Ok(Some(Event::Request(token, request)));
-            }
-        }
-
-        Ok(None)
     }
 
     pub fn remove(&mut self, token: Token) {
@@ -136,26 +139,6 @@ impl Stream {
             self.poll.registry().deregister(ws.get_mut()).unwrap();
         }
         self.generator.recycle(token.0);
-    }
-
-    fn read_request(ws: &mut WebSocket<TcpStream>) -> Result<Option<Request>> {
-        match ws.read_message() {
-            Ok(message) => match message {
-                Message::Text(msg) => {
-                    Ok(Some(Request::from_str(&msg)?))
-                },
-                Message::Close(_) => {
-                    Err(anyhow::Error::new(WsError::ConnectionClosed))
-                }
-                _ => Ok(None)
-            },
-            Err(error) => match error {
-                WsError::Io(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    Ok(None)
-                },
-                _ => Err(anyhow::Error::new(error))
-            }
-        }
     }
 
     pub fn push(&mut self, token: Token, response: Message) {
@@ -168,7 +151,7 @@ impl Stream {
         self.responses.append(&mut responses)
     }
 
-    fn write(&mut self, token: Token) -> Result<()> {
+    fn write(&mut self, token: Token) -> io::Result<()> {
         let (filtered, responses) = self.responses
             .drain(..)
             .partition(|(t, _)| *t == token);
@@ -178,7 +161,7 @@ impl Stream {
         if let Some(ws) = self.ws.get_mut(&token) {
             for (_, response) in filtered {
                 if let Err(_) = ws.write_message(response) {
-                    self.events.push(Event::Close(token))
+                    self.events.push(Event::Close(token));
                 }
             }
             self.poll.registry().reregister(ws.get_mut(), token, Interest::READABLE)?;

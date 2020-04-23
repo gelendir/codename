@@ -3,11 +3,14 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 use crate::request::Hint;
 use crate::team::Team;
 use crate::board::Tile;
+use crate::error::GameError;
 use crate::request;
-use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use mio::Token;
 use std::result;
+
+type Result<T> = result::Result<T, GameError>;
+
 
 #[derive(Debug, SerdeSerialize)]
 #[serde(rename_all="lowercase")]
@@ -88,7 +91,7 @@ impl GameTeam {
             .next();
 
         if self.master.is_none() {
-            return Err(anyhow!("master not found"))
+            return Err(GameError::NotFound("master"))
         }
         Ok(())
     }
@@ -97,7 +100,7 @@ impl GameTeam {
         self.validate_player(token, true)?;
 
         match self.state {
-            State::Guess => Err(anyhow!("not time to give a hint")),
+            State::Guess => Err(GameError::Turn("hint")),
             State::Hint => {
                 if self.guesses > 0 || self.previous.is_some() {
                     self.previous = Some(self.hint.clone());
@@ -116,7 +119,7 @@ impl GameTeam {
         self.validate_player(token, false)?;
 
         match self.state {
-            State::Hint => Err(anyhow!("not time to give a hint")),
+            State::Hint => Err(GameError::Turn("hint")),
             State::Guess => {
                 match tile {
                     Tile::Red if self.team == Team::Red => {
@@ -159,12 +162,12 @@ impl GameTeam {
         if master {
             match self.master {
                 Some(t) if token == t => Ok(()),
-                _ => Err(anyhow!("player not master"))
+                _ => Err(GameError::NotMaster)
             }
         } else {
             match self.players.get(&token) {
                 Some(_) => Ok(()),
-                None => Err(anyhow!("player not found in team"))
+                None => Err(GameError::NotFound("player"))
             }
         }
     }

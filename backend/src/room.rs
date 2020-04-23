@@ -2,10 +2,11 @@ use crate::board::Board;
 use crate::request;
 use crate::response;
 use crate::game::{Game, State};
-use anyhow::{Result, anyhow};
+use crate::error::{GameError};
 use mio::Token;
 use uuid::Uuid;
 use tungstenite::Message;
+
 
 pub type Responses = Vec<(Token, Message)>;
 
@@ -43,7 +44,6 @@ impl Room {
                 _ => {}
             }
         }
-
         responses
     }
 
@@ -58,14 +58,15 @@ impl Room {
             request::Request::Hint(h) => self.hint(token, h),
             request::Request::Guess(g) => self.guess(token, g),
             request::Request::Pass(_) => self.pass(token),
-            _ => Err(anyhow!("request not handled during game")),
+            _ => {
+                return vec![(token, response::error("unhandled request"))]
+            }
         };
 
         match result {
             Ok(r) => r,
             Err(error) => {
-                let msg = format!("{}", error);
-                vec![(token, response::error(&msg))]
+                vec![(token, response::error(&error.to_string()))]
             }
         }
     }
@@ -79,7 +80,7 @@ impl Room {
             .collect()
     }
 
-    fn join_team(&mut self, token: Token, team: &request::Team) -> Result<Responses> {
+    fn join_team(&mut self, token: Token, team: &request::Team) -> Result<Responses, GameError> {
         log::info!("{} - player {} joined team {:?}", self.id, team.name, team.team);
 
         self.game.add_player(token, team.team, &team.name);
@@ -88,7 +89,7 @@ impl Room {
         Ok(self.broadcast(response))
     }
 
-    fn start(&mut self, token: Token, start: &request::Start) -> Result<Responses> {
+    fn start(&mut self, token: Token, start: &request::Start) -> Result<Responses, GameError> {
         self.game.start(token, start)?;
         log::info!("{} - game started", self.id);
 
@@ -109,7 +110,7 @@ impl Room {
         Ok(responses)
     }
 
-    fn hint(&mut self, token: Token, hint: &request::Hint) -> Result<Responses> {
+    fn hint(&mut self, token: Token, hint: &request::Hint) -> Result<Responses, GameError> {
         self.game.hint(token, &hint)?;
         log::info!("{} - hint word: {} guesses: {}", self.id, hint.hint, hint.guesses);
 
@@ -118,7 +119,7 @@ impl Room {
         ))
     }
 
-    fn guess(&mut self, token: Token, guess: &request::Guess) -> Result<Responses> {
+    fn guess(&mut self, token: Token, guess: &request::Guess) -> Result<Responses, GameError> {
         self.game.guess(token, &guess)?;
         log::info!("{} - guess {} {}", self.id, guess.x, guess.y);
 
@@ -131,7 +132,7 @@ impl Room {
         }
     }
 
-    fn pass(&mut self, token: Token) -> Result<Responses> {
+    fn pass(&mut self, token: Token) -> Result<Responses, GameError> {
         self.game.pass(token)?;
         log::info!("{} - pass", self.id);
 
