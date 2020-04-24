@@ -7,7 +7,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="">
 
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
+    <!-- prod -->
+    <!--<script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>-->
+
+    <!-- dev -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
     <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
@@ -59,7 +64,7 @@
             <h1>CodeName</h1>
         </div>
         <div class="col-8 text-center">
-            <h2 v-if="user != null">Hello {{ user.name }}</h2>
+            <h2 v-if="name != null">Hello {{ name }}</h2>
             <span v-if="roomUrl">
                 Send this link to your friends: 
                 <a :href="roomUrl">{{ roomUrl }}</a>
@@ -77,6 +82,15 @@
                 :blue="game.blue"
             >
             </user-list>
+
+            <button 
+                v-if="showRestart"
+                @click.prevent="restart" 
+                type="submit" class="btn btn-primary"
+            >
+                Restart
+            </button>
+
             </div>
             <div class="col-10">
 
@@ -84,6 +98,7 @@
                     <div class="col-10">
                         <join-notice
                             v-if="showJoinNotice"
+                            :state="state"
                             :enoughplayers="enoughPlayers"
                         >
                         </join-notice>
@@ -93,16 +108,18 @@
                         >
                         </hint-notice>
                         <end
-                            v-if="showEnd"
+                            v-if="winner != null"
                             :winner="winner"
                         >
                         </end>
                     </div>
                 </div>
 
-                <login v-if="showLogin"
-                >
+                <login v-if="showLogin">
                 </login>
+
+                <team-select v-if="showTeamSelect">
+                </team-select>
 
                 <master-select 
                     v-if="showMasterSelect"
@@ -117,14 +134,11 @@
                     :tiles="tiles"
                 >
                 </board>
-                <pass
-                    v-if="showPass"
-                >
+
+                <pass v-if="showPass">
                 </pass>
 
-                <hint-box
-                    v-if="showHintBox"
-                >
+                <hint-box v-if="showHintBox">
                 </hint-box>
             </div>
         </div>
@@ -141,6 +155,19 @@
                     <label for="name">Enter your name:</label>
                     <input id="name" type="text" v-model="name" class="form-control">
                 </div>
+                <button @click="login" type="submit" class="btn btn-primary">Login</button>
+            </form>
+        </div>
+    </div>
+</div>
+</script>
+
+<script type="text/x-template" id="team-select">
+<div class="row">
+    <div class="col-3"></div>
+    <div class="col-3">
+        <div class="card p-1">
+            <form v-on:submit.prevent>
                 <div class="form-group">
                     <label>Choose your team:</label>
                     <div class="form-check">
@@ -152,7 +179,7 @@
                         <label class="form-check-label" for="red">Red</label>
                     </div>
                 </div>
-                <button @click="login" type="submit" class="btn btn-primary">Start</button>
+                <button @click="selectTeam" type="submit" class="btn btn-primary">Select</button>
             </form>
         </div>
     </div>
@@ -297,11 +324,14 @@
 
 <script type="text/x-template" id="join-notice">
 <div class="alert alert-secondary" role="alert">
-    <span v-if="enoughplayers">
-        Waiting for administrator to start game
+    <span v-if="waitingPlayers">
+        Waiting for enough players
     </span>
-    <span v-else>
-        Waiting for enough players to join the game
+    <span v-if="waitingTeam">
+        Waiting for players to join a team
+    </span>
+    <span v-if="waitingStart">
+        Waiting for administrator to start game
     </span>
 </div>
 </script>
@@ -398,13 +428,26 @@ Vue.component('login', {
     template: '#login',
     data: function() {
         return {
-            team: 'blue',
             name: ''
         }
     },
     methods: {
         login: function() {
-            vm.login(this.name,  this.team)
+            vm.login(this.name)
+        }
+    }
+})
+
+Vue.component('team-select', {
+    template: '#team-select',
+    data: function() {
+        return {
+            team: ''
+        }
+    },
+    methods: {
+        selectTeam: function() {
+            vm.selectTeam(this.team)
         }
     }
 })
@@ -487,7 +530,18 @@ Vue.component('hint-box', {
 
 Vue.component('join-notice', {
     template: '#join-notice',
-    props: ['enoughplayers']
+    props: ['enoughplayers', 'state'],
+    computed: {
+        waitingPlayers: function() {
+            return this.state == 'join'
+        },
+        waitingTeam: function() {
+            return this.state == 'team' && !this.enoughplayers
+        },
+        waitingStart: function() {
+            return this.state == 'team' && this.enoughplayers
+        }
+    }
 })
 
 Vue.component('hint-notice', {
@@ -535,8 +589,8 @@ Vue.component('pass', {
 var vm = new Vue({
   el: '#app',
   methods: {
-    login: function(name, team) {
-        this.user = {name: name, team: team}
+    login: function(name) {
+        this.name = name
 
         var backend = "wss://" + window.location.host + "/api"
         this.socket = new WebSocket(backend)
@@ -559,18 +613,19 @@ var vm = new Vue({
         }
     },
     createOrJoinRoom: function() {
-        var roomid = (new URL(window.location)).searchParams.get("roomid")
-        if (roomid == null) {
-            this.sendRequest({request: 'room'})
+        var id = (new URL(window.location)).searchParams.get("roomid")
+        if (id == null) {
+            this.sendRequest({request: 'room', name: this.name})
+            this.admin = true
         } else {
-            this.roomid = roomid
-            this.sendRequest({'request': 'join', id: roomid})
+            this.id = id
+            this.sendRequest({'request': 'join', 'name': this.name, id: id})
         }
-
+    },
+    selectTeam: function(team) {
         this.sendRequest({
-            request: 'team', 
-            name: this.user.name, 
-            team: this.user.team
+            request: 'team',
+            team: team
         })
     },
     start: function(red, blue) {
@@ -579,6 +634,9 @@ var vm = new Vue({
           red: red,
           blue: blue
       })
+    },
+    restart: function() {
+        this.sendRequest({request: 'reset'})
     },
     guess: function(x, y) {
         this.sendRequest({
@@ -608,32 +666,13 @@ var vm = new Vue({
         if (response.response == 'error') {
             console.error("ERROR response: " + response.error)
             alert('ERROR: ' + response.error)
-        } else if (response.response == 'room') {
-            this.roomid = response.id
-            this.admin = true
-        } else if (response.response == 'join') {
-            this.$set(this, 'game', response.game)
-            if (this.state == 'login') {
-                this.state = 'join'
-            }
-        } else if (response.response == 'leave') {
-            this.$set(this, 'game', response.game)
         } else if (response.response == 'tiles') {
             this.$set(this, 'tiles', response.tiles)
-        } else if (response.response == 'turn') {
-            this.$set(this, 'game', response.game)
-            if (this.state != 'play') {
-                this.state = 'play'
-            }
-        } else if (response.response == 'hint') {
-            this.$set(this, 'game', response.game)
-        } else if (response.response == 'restart') {
-            this.state = 'join'
-            this.$set(this, 'game', response.game)
-        } else if (response.response == 'end') {
-            this.$set(this, 'game', response.game)
-            this.winner = response.winner
-            this.state = 'end'
+        } else {
+            this.$set(this, 'id', response.room.id)
+            this.$set(this, 'state', response.room.state)
+            this.$set(this, 'game', response.room.game)
+            this.$set(this, 'players', response.room.players)
         }
     }
   },
@@ -642,19 +681,25 @@ var vm = new Vue({
           return this.state == 'login'
       },
       showUsers: function() {
-          return this.state == 'join' || this.state == 'play'
+          return this.state == 'team' || this.state == 'play' || this.state == 'end'
       },
-      showMasterSelect: function() {
-          return this.admin && this.state == 'join' && this.enoughPlayers
+      showRestart: function() {
+          return (this.state == 'play' || this.state == 'end') && this.admin
+      },
+      showTeamSelect: function() {
+          return (this.state == 'team' || this.state == 'play') && this.team == null
       },
       showBoard: function() {
-          return this.state == 'play' || this.state == 'end'
+          return (this.state == 'play' || this.state == 'end') && this.team != null
+      },
+      showMasterSelect: function() {
+          return this.admin && this.state == 'team' && this.enoughPlayers
       },
       showHintNotice: function() {
           return this.state == 'play'
       },
       showJoinNotice: function() {
-          return this.state == 'join'
+          return this.state == 'join' || this.state == 'team'
       },
       showHintBox: function() {
           if (this.state != 'play') {
@@ -662,7 +707,7 @@ var vm = new Vue({
           }
 
           return (
-              this.game.turn == this.user.team
+              this.game.turn == this.team
               && this.game.action == 'hint'
               && this.tiles != null
           )
@@ -671,33 +716,47 @@ var vm = new Vue({
           return (
               this.state == 'play'
               && this.game.action == 'guess'
-              && this.game.turn == this.user.team
+              && this.game.turn == this.team
               && this.tiles == null
           )
       },
-      showEnd: function() {
-          return this.state == 'end'
+      winner: function() {
+          if (this.state == 'end') {
+              return this.game.turn
+          }
+          return null
       },
       roomUrl: function() {
-          if (this.roomid != null) {
+          if (this.id != null) {
               var url = new URL(window.location)
-              url.search = "?roomid=" + this.roomid
+              url.search = "?roomid=" + this.id
               return url.href
           }
           return null
       },
       enoughPlayers: function() {
           return this.game.red.players.length >= 2 && this.game.blue.players.length >= 2
+      },
+      haveMasters: function() {
+          return this.game.red.master != null && this.game.blue.master != null
+      },
+      team: function() {
+          for (team of ["red", "blue"]) {
+              if (this.game[team].players.includes(this.name)) {
+                  return team
+              }
+          }
+          return null
       }
   },
   data: {
+      id: null,
       admin: false,
       state: 'login',
-      user: null,
+      players: [],
+      name: null,
       tiles: null,
       socket: null,
-      winner: null,
-      roomid: null,
       game: null
   }
 })
