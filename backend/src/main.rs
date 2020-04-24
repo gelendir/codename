@@ -15,6 +15,7 @@ extern crate log;
 use mio::net::TcpListener;
 use std::error::Error;
 use std::env;
+use std::rc::Rc;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -27,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind(addr)?;
 
     let stream = stream::Stream::new(listener)?;
-    let mut server = server::Server::new(boardset, stream);
+    let mut server = server::Server::new(Rc::new(boardset), stream);
 
     if let Err(e) = server.run() {
         log::error!("server error: {}", e);

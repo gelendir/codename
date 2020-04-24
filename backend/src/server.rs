@@ -1,25 +1,26 @@
 use crate::board::BoardSet;
 use crate::room::Room;
-use crate::request::Request;
+use crate::request;
 use crate::response;
 use crate::stream::{Stream, Event};
 use uuid::Uuid;
 use mio::Token;
 use std::collections::HashMap;
 use std::error::Error;
+use std::rc::Rc;
 
 
 pub struct Server {
     stream: Stream,
     players: HashMap<Token, Uuid>,
     rooms: HashMap<Uuid, Room>,
-    boardset: BoardSet,
+    boardset: Rc<BoardSet>
 }
 
 
 impl Server {
 
-    pub fn new(boardset: BoardSet, stream: Stream) -> Server {
+    pub fn new(boardset: Rc<BoardSet>, stream: Stream) -> Server {
         Server {
             boardset: boardset,
             stream: stream,
@@ -57,6 +58,7 @@ impl Server {
             };
 
             if remove {
+                log::info!("{} - closing room", id);
                 if let Some(room) = self.rooms.remove(&id) {
                     for token in room.game.tokens() {
                         self.stream.remove(*token)
@@ -66,7 +68,7 @@ impl Server {
         }
     }
     
-    fn handle_request(&mut self, token: Token, request: Request) {
+    fn handle_request(&mut self, token: Token, request: request::Request) {
         if self.players.contains_key(&token) {
             self.handle_room(token, &request);
         } else {
@@ -74,22 +76,23 @@ impl Server {
         }
     }
 
-    fn handle_room(&mut self, token: Token, request: &Request) {
+    fn handle_room(&mut self, token: Token, request: &request::Request) {
         if let Some(id) = self.players.get(&token) {
             if let Some(room) = self.rooms.get_mut(id) {
-                log::debug!("handle room: {:?} {:?}", token, request);
+                log::debug!("{} - handle token {} request {:?}", room.id, token.0, request);
                 let responses = room.handle(token, &request);
                 self.stream.append(responses);
             }
         }
     }
 
-    fn handle_client(&mut self, token: Token, request: &Request) {
-        log::debug!("handle client: {:?} {:?}", token, request);
+    fn handle_client(&mut self, token: Token, request: &request::Request) {
         match &request {
-            Request::Room(_) => self.new_room(token, &request),
-            Request::Join(j) if self.rooms.contains_key(&j.id) => {
+            request::Request::Room(r) => self.new_room(token, r),
+            request::Request::Join(j) if self.rooms.contains_key(&j.id) => {
+                log::debug!("{} - adding token {}", j.id, token.0);
                 self.players.insert(token, j.id);
+                self.handle_room(token, request);
             },
             _ => {
                 let msg = "invalid request. Expecting room or join";
@@ -98,14 +101,13 @@ impl Server {
         }
     }
 
-    fn new_room(&mut self, token: Token, request: &Request) {
-        log::debug!("new room: {:?} {:?}", token, request);
-        let id = Uuid::new_v4();
-        self.players.insert(token, id);
+    fn new_room(&mut self, token: Token, request: &request::Room) {
+        let room = Room::new(self.boardset.clone(), token, request);
+        log::info!("{} - new room created by {}", room.id, request.name);
 
-        let room = Room::new(id, self.boardset.new_board(), token);
+        self.players.insert(token, room.id);
         self.stream.append(room.broadcast_room());
+        self.rooms.insert(room.id, room);
 
-        self.rooms.insert(id, room);
     }
 }

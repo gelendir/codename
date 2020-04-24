@@ -43,7 +43,7 @@ impl Serialize for Game {
             Team::Red => &self.red.state
         };
 
-        let mut s = serializer.serialize_struct("Game", 4)?;
+        let mut s = serializer.serialize_struct("Game", 5)?;
         s.serialize_field("board", &self.board)?;
         s.serialize_field("red", &self.red)?;
         s.serialize_field("blue", &self.blue)?;
@@ -87,17 +87,11 @@ impl Game {
     pub fn remove_player(&mut self, token: Token) -> Option<String> {
         let result = self.red.remove_player(token).or(self.blue.remove_player(token));
         if result.is_some() {
-            for team in [&self.red, &self.blue].iter() {
-                if !(team.has_master() && team.nb_players() >= 2) {
-                    self.state = State::Start
-                }
+            if !(self.red.playable() && self.blue.playable()) {
+                self.state = State::Start
             }
         }
         result
-    }
-
-    pub fn nb_players(&self) -> usize {
-        self.red.nb_players() + self.blue.nb_players()
     }
 
     pub fn tokens(&self) -> impl Iterator<Item = &Token> {

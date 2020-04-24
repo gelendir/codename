@@ -6,16 +6,21 @@ use crate::error::RequestError;
 
 #[derive(Deserialize, Debug)]
 pub struct Room {
+    pub name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Reset {
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Join {
     pub id: Uuid,
+    pub name: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Team {
-    pub name: String,
     pub team: TeamColor,
 }
 
@@ -50,6 +55,7 @@ pub enum Request {
     Hint(Hint),
     Guess(Guess),
     Pass(Pass),
+    Reset(Reset),
 }
 
 impl Request {
@@ -62,6 +68,7 @@ impl Request {
 
         if let Value::String(request) = result {
             match request.as_str() {
+                "reset" => Reset::parse(data),
                 "room" => Room::parse(data),
                 "join" => Join::parse(data),
                 "team" => Team::parse(data),
@@ -75,6 +82,15 @@ impl Request {
             Err(RequestError::Missing("request"))
         }
     }
+}
+
+impl Reset {
+
+    pub fn parse(data: Value) -> Result<Request, RequestError> {
+        let reset: Reset = serde_json::from_value(data)?;
+        Ok(Request::Reset(reset))
+    }
+
 }
 
 impl Room {
@@ -100,9 +116,6 @@ impl Team {
 
     pub fn parse(data: Value) -> Result<Request, RequestError> {
         let team: Team = serde_json::from_value(data)?;
-        if team.name == "" {
-            return Err(RequestError::Missing("name"))
-        }
         Ok(Request::Team(team))
     }
 

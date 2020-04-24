@@ -87,6 +87,7 @@ impl Stream {
     pub fn reregister(&mut self) -> io::Result<()> {
         for (token, _) in self.responses.iter() {
             if let Some(ws) = self.ws.get_mut(&token) {
+                log::debug!("reregister write {}", token.0);
                 self.poll.registry().reregister(ws.get_mut(), *token, Interest::READABLE | Interest::WRITABLE)?;
             }
         }
@@ -94,38 +95,47 @@ impl Stream {
     }
 
     fn read(&mut self, token: Token) {
-        loop {
-            self.read_event(token)
-        }
-    }
-
-    fn read_event(&mut self, token: Token) {
         if let Some(stream) = self.sockets.remove(&token) {
-            if let Ok(ws) = accept(stream) {
-                self.ws.insert(token, ws);
-            } else {
-                self.remove(token)
+            log::debug!("accepting socket {}", token.0);
+            match accept(stream) {
+                Ok(ws) => {
+                     self.ws.insert(token, ws);
+                },
+                Err(error) => {
+                    log::error!("accept error: {}", error);
+                    self.remove(token);
+                }
             }
+            return
         }
 
         if let Some(ws) = self.ws.get_mut(&token) {
-            match ws.read_message() {
-                Ok(message) => match message {
-                    Message::Text(msg) => {
-                        match Request::from_str(&msg) {
-                            Ok(request) => self.events.push(Event::Request(token, request)),
-                            Err(error) => self.events.push(Event::Error(token, error))
+            loop {
+                log::debug!("reading request on {}", token.0);
+                match ws.read_message() {
+                    Ok(message) => match message {
+                        Message::Text(msg) => {
+                            match Request::from_str(&msg) {
+                                Ok(request) => self.events.push(Event::Request(token, request)),
+                                Err(error) => self.events.push(Event::Error(token, error))
+                            }
+                        },
+                        Message::Close(_) => {
+                             self.events.push(Event::Close(token));
+                             return
                         }
+                        _ => {}
                     },
-                    Message::Close(_) => self.events.push(Event::Close(token)),
-                    _ => {}
-                },
-                Err(error) => match error {
-                    WsError::Io(e) if e.kind() != io::ErrorKind::WouldBlock => {
-                        self.events.push(Event::Close(token))
-                    },
-                    _ => {
-                        self.events.push(Event::Close(token))
+                    Err(error) => match error {
+                        WsError::Io(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            log::debug!("finished reading requests on {}", token.0);
+                            return
+                        },
+                        _ => {
+                            log::error!("read error: {}", error);
+                            self.events.push(Event::Close(token));
+                            return
+                        }
                     }
                 }
             }
@@ -134,8 +144,10 @@ impl Stream {
 
     pub fn remove(&mut self, token: Token) {
         if let Some(mut s) = self.sockets.remove(&token) {
+            log::debug!("removing socket {}", token.0);
             self.poll.registry().deregister(&mut s).unwrap();
         } else if let Some(mut ws) = self.ws.remove(&token) {
+            log::debug!("removing websocket {}", token.0);
             self.poll.registry().deregister(ws.get_mut()).unwrap();
         }
         self.generator.recycle(token.0);
@@ -160,7 +172,8 @@ impl Stream {
 
         if let Some(ws) = self.ws.get_mut(&token) {
             for (_, response) in filtered {
-                if let Err(_) = ws.write_message(response) {
+                if let Err(error) = ws.write_message(response) {
+                    log::error!("write error: {}", error);
                     self.events.push(Event::Close(token));
                 }
             }

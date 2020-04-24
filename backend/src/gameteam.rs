@@ -71,6 +71,11 @@ impl GameTeam {
     }
 
     pub fn remove_player(&mut self, token: Token) -> Option<String> {
+        if let Some(master) = self.master {
+            if master == token {
+                self.master = None;
+            }
+        }
         self.players.remove(&token)
     }
 
@@ -78,8 +83,8 @@ impl GameTeam {
         self.players.len()
     }
 
-    pub fn has_master(&self) -> bool {
-        self.master.is_some()
+    pub fn playable(&self) -> bool {
+        self.players.len() >= 2 && self.master.is_some()
     }
 
     pub fn set_master(&mut self, start: &request::Start) -> Result<()> {
