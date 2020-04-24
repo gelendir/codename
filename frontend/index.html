@@ -677,7 +677,7 @@ var vm = new Vue({
     createOrJoinRoom: function() {
         var id = (new URL(window.location)).searchParams.get("roomid")
         if (id == null) {
-            this.sendRequest({request: 'room', name: this.name})
+            this.sendRequest({request: 'room', name: this.name, language: i18n.locale})
             this.admin = true
         } else {
             this.id = id
@@ -698,7 +698,7 @@ var vm = new Vue({
       })
     },
     restart: function() {
-        this.sendRequest({request: 'reset'})
+        this.sendRequest({request: 'reset', language: i18n.locale})
     },
     guess: function(x, y) {
         this.sendRequest({
