@@ -8,10 +8,12 @@
     <meta name="description" content="">
 
     <!-- prod -->
-    <!--<script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>-->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
 
     <!-- dev -->
-    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <!--<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>-->
+
+    <script src="https://unpkg.com/vue-i18n/dist/vue-i18n.js"></script>
 
     <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
@@ -64,9 +66,9 @@
             <h1>CodeName</h1>
         </div>
         <div class="col-8 text-center">
-            <h2 v-if="name != null">Hello {{ name }}</h2>
+            <h2 v-if="name != null">{{ $t('hello', {name: name}) }}</h2>
             <span v-if="roomUrl">
-                Send this link to your friends: 
+                {{ $t('sendlink') }}
                 <a :href="roomUrl">{{ roomUrl }}</a>
             </span>
         </div>
@@ -88,7 +90,7 @@
                 @click.prevent="restart" 
                 type="submit" class="btn btn-primary"
             >
-                Restart
+                {{ $t('restart')}}
             </button>
 
             </div>
@@ -152,10 +154,17 @@
         <div class="card p-1">
             <form v-on:submit.prevent>
                 <div class="form-group">
-                    <label for="name">Enter your name:</label>
+                    <label for="name">{{ $t('entername') }}</label>
                     <input id="name" type="text" v-model="name" class="form-control">
                 </div>
-                <button @click="login" type="submit" class="btn btn-primary">Login</button>
+                <div class="form-group">
+                    <label for="name">Language / Langue :</label>
+                    <select @change="changeLanguage" v-model="language">
+                        <option value="en">English / Anglais</option>
+                        <option value="fr">French / Français</option>
+                    </select>
+                </div>
+                <button @click="login" type="submit" class="btn btn-primary">{{ $t('login') }}</button>
             </form>
         </div>
     </div>
@@ -169,17 +178,17 @@
         <div class="card p-1">
             <form v-on:submit.prevent>
                 <div class="form-group">
-                    <label>Choose your team:</label>
+                    <label>{{ $t('chooseteam') }}</label>
                     <div class="form-check">
                         <input id="blue" type="radio" value="blue" v-model="team" class="form-check-input">
-                        <label class="form-check-label" for="blue">Blue</label>
+                        <label class="form-check-label" for="blue">{{ $t('blue') }}</label>
                     </div>
                     <div class="form-check">
                         <input id="red" type="radio" value="red" v-model="team" class="form-check-input">
-                        <label class="form-check-label" for="red">Red</label>
+                        <label class="form-check-label" for="red">{{ $t('red') }}</label>
                     </div>
                 </div>
-                <button @click="selectTeam" type="submit" class="btn btn-primary">Select</button>
+                <button @click="selectTeam" type="submit" class="btn btn-primary">{{ $t('select') }}</button>
             </form>
         </div>
     </div>
@@ -189,7 +198,7 @@
 <script type="text/x-template" id="user-list">
 <div>
     <div class="card border-primary mb-1">
-        <div class="card-header text-primary">Blue team</div>
+        <div class="card-header text-primary">{{ $t('teamlabel', {team: $t('blue')}) }}</div>
         <div class="card-body">
             <team-list
                 :players="blue.players"
@@ -198,7 +207,7 @@
         </div>
     </div>
     <div class="card border-danger mb-1">
-        <div class="card-header text-danger">Red team</div>
+        <div class="card-header text-danger">{{ $t('teamlabel', {team: $t('red')}) }}</div>
         <div class="card-body">
             <team-list
                 :players="red.players"
@@ -227,7 +236,7 @@
     <div class="col-4">
         <div class="card p-1">
             <form v-on:submit.prevent>
-                <h4>Pick the card masters for each team</h4>
+                <h4>{{ $t('pickmasters') }}</h4>
 
                 <master-list
                     :players="red.players"
@@ -241,7 +250,7 @@
                 >
                 </master-list>
 
-                <button @click="start" type="submit" class="btn btn-primary">Select</button>
+                <button @click="start" type="submit" class="btn btn-primary">{{ $t('select') }}</button>
             </form>
         </div>
     </div>
@@ -250,7 +259,7 @@
 
 <script type="text/x-template" id="master-list">
 <div class="form-group">
-    <label>{{ teamCapitalized }} team</label>
+    <label>{{ $t('teamlabel', {team: $t(team)}) }}</label>
     <div class="form-check" v-for="player in players" :key="'master-' + player">
         <input 
             :id="player" :name="player" :value="player" v-model="master" 
@@ -289,20 +298,20 @@
         <div class="card p-1">
         <form v-on:submit.prevent>
             <div class="form-group">
-                <label for="hint">Hint</label>
+                <label for="hint">{{ $t('hint') }}</label>
                 <input id="hint" v-model="hint" type="text" class="form-control" aria-describedby="hintHelp">
                 <small id="hintHelp" class="form-text text-muted">
-                    Enter a word to help your team guess some cards
+                    {{ $t('hinthelp') }}
                 </small>
             </div>
             <div class="form-group">
-                <label for="guesses">Guesses</label>
+                <label for="guesses">{{ $t('guesses') }}</label>
                 <input id="guesses" v-model="guesses" type="text" class="form-control" aria-describedby="guessHelp">
                 <small id="guessHelp" class="form-text text-muted">
-                    Enter the number of cards your team should try to guess
+                    {{ $t('guesshelp') }}
                 </small>
             </div>
-            <button @click="sendHint" type="submit" class="btn btn-primary">Send Hint</button>
+            <button @click="sendHint" type="submit" class="btn btn-primary">{{ $t('send') }}</button>
         </form>
         </div>
     </div>
@@ -312,12 +321,11 @@
 <script type="text/x-template" id="hint-notice">
 <div :class="hintClasses" role="alert">
     <span v-if="game.action == 'hint'">
-        {{ teamCapitalized }} team are waiting for their hint
+        {{ $t('teamwaiting', {team: $t(team)}) }}
     </span>
     <span v-else>
-        {{ teamCapitalized }} team are playing.
-        The hint is "{{ teamHint }}" for {{ teamGuesses }} guesses.
-        <span v-if="previous != null">(previous hint: {{ previous }})</span>
+        {{ $t('teamplaying', {team: $t(team), hint: teamHint, guesses: teamGuesses}) }}
+        <span v-if="previous != null">{{ $t('previoushint', {previous: previous}) }}</span>
     </span>
 </div>
 </script>
@@ -325,13 +333,13 @@
 <script type="text/x-template" id="join-notice">
 <div class="alert alert-secondary" role="alert">
     <span v-if="waitingPlayers">
-        Waiting for enough players
+        {{ $t('waitplayers') }}
     </span>
     <span v-if="waitingTeam">
-        Waiting for players to join a team
+        {{ $t('waitjoin') }}
     </span>
     <span v-if="waitingStart">
-        Waiting for administrator to start game
+        {{ $t('waitadmin') }}
     </span>
 </div>
 </script>
@@ -340,7 +348,7 @@
 <div class="row">
     <div class="col-2">
         <button type="button" @click.prevent="pass" class="btn btn-secondary">
-            Pass turn
+            {{ $t('passturn') }}
         </button>
     </div>
 </div>
@@ -349,12 +357,72 @@
 <script type="text/x-template" id="end">
 <div class="alert alert-success" role="alert">
     <span>
-        {{ winner }} have won the game !
+        {{ $t('wingame', {winner: $t(winner)}) }}
     </span>
 </div>
 </script>
 
 <script>
+
+const messages = {
+    en: {
+        hello: 'Hello {name}',
+        sendlink: 'Send this link to your friends:',
+        restart: 'Restart',
+        entername: 'Enter your name:',
+        login: 'Login',
+        chooseteam: 'Choose your team:',
+        red: 'Red',
+        blue: 'Blue',
+        select: 'Select',
+        pickmasters: 'Pick the card masters for each team',
+        teamlabel: '{team} team',
+        hint: 'Hint',
+        hinthelp: 'Enter a word to help your team guess some cards',
+        guesses: 'Guesses',
+        guesshelp: 'Enter the number of cards your team should try to guess',
+        send: 'Send',
+        teamwaiting: '{team} team are waiting for their hint.',
+        teamplaying: '{team} are playing. The hint is {hint} for {guesses} guesses',
+        previoushint: '(previous hint: {previous})',
+        waitplayers: 'Waiting for enough players',
+        waitjoin: 'Waiting for players to join a team',
+        waitadmin: 'Waiting for administrator to start game',
+        passturn: 'Pass turn',
+        wingame: '{winner} have won the game !'
+    },
+    fr: {
+        hello: 'Bonjour {name}',
+        sendlink: 'Envoyez ce lien à vos amis :',
+        restart: 'Recommencer',
+        entername: 'Entrez votre nom:',
+        login: 'Entrer',
+        chooseteam: 'Choissisez votre équipe :',
+        red: 'Rouge',
+        blue: 'Bleu',
+        select: 'Sélectionner',
+        pickmasters: 'Choissisez le maître de jeu pour chaque équipe',
+        teamlabel: 'Équipe {team}',
+        hint: 'Indice',
+        hinthelp: 'Entrez un indice pour aider votre équipe à deviner des cartes',
+        guesses: 'Nombre de mots',
+        guesshelp: 'Entrez le nombre de mots que votre équipe doit deviner',
+        send: 'Envoyer',
+        teamwaiting: "L'équipe {team} sont en attente d'un indice.",
+        teamplaying: "C'est le tour de l'équipe {team}. L'indice est {hint}, pour {guesses} cartes.",
+        previoushint: '(indice précédent: {previous})',
+        waitplayers: 'En attente des autres joueurs',
+        waitjoin: 'En attente de la formation des équipes',
+        waitadmin: "En attente du départ donné par l'administrateur",
+        passturn: 'Passer le tour',
+        wingame: "L'équipe {winner} ont gagné !"
+    }
+}
+
+const i18n = new VueI18n({
+    locale: 'en',
+    messages,
+})
 
 var TeamList = {
     props: ['players'],
@@ -367,14 +435,6 @@ var MasterList = {
     data: function() {
         return {
             'master': '',
-        }
-    },
-    computed: {
-        teamCapitalized: function() {
-            var team = this.team.slice()
-            var letter = team[0].toUpperCase()
-            team[0] = letter
-            return team
         }
     }
 }
@@ -428,12 +488,16 @@ Vue.component('login', {
     template: '#login',
     data: function() {
         return {
-            name: ''
+            name: '',
+            language: 'en'
         }
     },
     methods: {
         login: function() {
             vm.login(this.name)
+        },
+        changeLanguage: function() {
+            i18n.locale = this.language
         }
     }
 })
@@ -554,10 +618,8 @@ Vue.component('hint-notice', {
         teamGuesses: function() {
             return this.game[this.game.turn].guesses
         },
-        teamCapitalized: function() {
-            var team = this.game.turn.slice()
-            team[0] = team[0].toUpperCase()
-            return team
+        team: function() {
+            return this.game.turn
         },
         hintClasses: function() {
             return {
@@ -758,7 +820,8 @@ var vm = new Vue({
       tiles: null,
       socket: null,
       game: null
-  }
+  },
+  i18n,
 })
 
 </script>
