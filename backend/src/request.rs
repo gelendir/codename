@@ -7,10 +7,12 @@ use crate::error::RequestError;
 #[derive(Deserialize, Debug)]
 pub struct Room {
     pub name: String,
+    pub language: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Reset {
+    pub language: String,
 }
 
 #[derive(Deserialize, Debug)]

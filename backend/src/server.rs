@@ -102,12 +102,16 @@ impl Server {
     }
 
     fn new_room(&mut self, token: Token, request: &request::Room) {
-        let room = Room::new(self.boardset.clone(), token, request);
-        log::info!("{} - new room created by {}", room.id, request.name);
-
-        self.players.insert(token, room.id);
-        self.stream.append(room.broadcast_room());
-        self.rooms.insert(room.id, room);
-
+        match Room::new(self.boardset.clone(), token, request) {
+            Ok(room) => {
+                log::info!("{} - new room created by {}", room.id, request.name);
+                self.players.insert(token, room.id);
+                self.stream.append(room.broadcast_room());
+                self.rooms.insert(room.id, room);
+            },
+            Err(error) => {
+                self.stream.push(token, response::error(&error.to_string()))
+            }
+        }
     }
 }

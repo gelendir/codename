@@ -30,3 +30,17 @@ pub enum GameError {
     #[error("game has already started")]
     AlreadyStarted,
 }
+
+#[derive(Error, Debug)]
+pub enum BoardError {
+    #[error("language '{0}' not found")]
+    Language(String)
+}
+
+#[derive(Error, Debug)]
+pub enum RoomError {
+    #[error("board error: {0}")]
+    Board(#[from] BoardError),
+    #[error("game error: {0}")]
+    Game(#[from] GameError),
+}

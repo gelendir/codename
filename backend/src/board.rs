@@ -6,11 +6,14 @@ use std::io::prelude::*;
 use std::io::Error;
 use rand::prelude::*;
 use crate::team::Team;
+use crate::error::BoardError;
+use std::collections::HashMap;
 
 
 pub type WordMap = [ [String; 5]; 5];
 pub type TileMap = [ [Tile; 5]; 5];
 pub type CardMap = [ [bool; 5]; 5];
+pub type Dictionnary = HashMap<String, Vec<String>>;
 
 #[derive(Debug, Clone, SerdeSerialize, SerdeDeserialize, PartialEq)]
 #[serde(rename_all="lowercase")]
@@ -23,7 +26,7 @@ pub enum Tile {
 
 #[derive(Debug, SerdeSerialize, SerdeDeserialize)]
 pub struct BoardSet {
-    words: Vec<String>,
+    words: Dictionnary,
     tiles: Vec<TileMap>,
 }
 
@@ -70,10 +73,15 @@ pub fn load_board_file(path: &str) -> Result<BoardSet, Error> {
 
 impl BoardSet {
 
-    pub fn new_board(&self) -> Board {
+    pub fn new_board(&self, language: &str) -> Result<Board, BoardError> {
         let mut rng = rand::thread_rng();
 
-        let mut words: Vec<&String> = self.words.iter().collect();
+        let words = self.words
+            .get(language)
+            .ok_or(BoardError::Language(language.to_string()))?;
+
+        let mut words: Vec<&String> = words.iter().collect();
+
         words.shuffle(&mut rng);
 
         let wordmap = [
@@ -96,11 +104,11 @@ impl BoardSet {
             [false; 5],
         ];
 
-        Board{
+        Ok(Board{
             words: wordmap,
             tiles: tilemap,
             cards: cardmap,
-        }
+        })
     }
 
 }
