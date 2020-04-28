@@ -735,6 +735,9 @@ var vm = new Vue({
             this.$set(this, 'state', response.room.state)
             this.$set(this, 'game', response.room.game)
             this.$set(this, 'players', response.room.players)
+            if (this.state == 'join' || this.state == 'team') {
+                this.$set(this, 'tiles', null)
+            }
         }
     }
   },
