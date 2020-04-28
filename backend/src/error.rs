@@ -43,4 +43,11 @@ pub enum RoomError {
     Board(#[from] BoardError),
     #[error("game error: {0}")]
     Game(#[from] GameError),
+    #[error("unhandled request")]
+    Unhandled,
+    #[error("forbidden request. send room or join request at startup")]
+    Forbidden,
+    #[error("room {0} not found")]
+    NotFound(Uuid),
+
 }

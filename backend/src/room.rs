@@ -2,7 +2,7 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 use crate::request;
 use crate::response;
 use crate::game::{Game, State};
-use crate::error::RoomError;
+use crate::error::{RoomError, GameError};
 use crate::board::BoardSet;
 use mio::Token;
 use uuid::Uuid;
@@ -11,8 +11,8 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use std::result;
 
-
 pub type Responses = Vec<(Token, Message)>;
+type Result<T> = result::Result<T, RoomError>;
 
 #[derive(Debug)]
 pub struct Room {
@@ -48,7 +48,7 @@ impl Serialize for Room {
 
 impl Room {
 
-    pub fn new(boards: Rc<BoardSet>, admin: Token, request: &request::Room) -> Result<Room, RoomError> {
+    pub fn new(boards: Rc<BoardSet>, admin: Token, request: &request::Room) -> Result<Room> {
         let board = boards.new_board(&request.language)?;
 
         let mut players = HashMap::new();
@@ -81,8 +81,8 @@ impl Room {
         vec![(self.admin, response::room(self))]
     }
 
-    pub fn handle(&mut self, token: Token, request: &request::Request) -> Responses {
-        let result = match request {
+    pub fn handle(&mut self, token: Token, request: &request::Request) -> Result<Responses> {
+        match request {
             request::Request::Join(j) => self.join(token, j),
             request::Request::Team(t) => self.team(token, t),
             request::Request::Start(s) => self.start(token, s),
@@ -91,14 +91,7 @@ impl Room {
             request::Request::Pass(_) => self.pass(token),
             request::Request::Reset(r) => self.reset(token, r),
             _ => {
-                return vec![(token, response::error("unhandled request"))]
-            }
-        };
-
-        match result {
-            Ok(r) => r,
-            Err(error) => {
-                vec![(token, response::error(&error.to_string()))]
+                Err(RoomError::Unhandled)
             }
         }
     }
@@ -112,7 +105,7 @@ impl Room {
             .collect()
     }
 
-    fn reset(&mut self, token: Token, reset: &request::Reset) -> Result<Responses, RoomError> {
+    fn reset(&mut self, token: Token, reset: &request::Reset) -> Result<Responses> {
         log::info!("{} - game reset", self.id);
 
         if token == self.admin {
@@ -121,33 +114,29 @@ impl Room {
             let response = response::room(&self);
             Ok(self.broadcast(response))
         } else {
-            let response = response::error("player not admin");
-            Ok(vec![(token, response)])
+            Err(GameError::NotAdmin)?
         }
     }
 
-    fn join(&mut self, token: Token, join: &request::Join) -> Result<Responses, RoomError> {
+    fn join(&mut self, token: Token, join: &request::Join) -> Result<Responses> {
         log::info!("{} - {} has joined", self.id, join.name);
-
         self.players.insert(token, join.name.clone());
+
         let response = response::room(&self);
         Ok(self.broadcast(response))
     }
 
-    fn team(&mut self, token: Token, team: &request::Team) -> Result<Responses, RoomError> {
-        if let Some(name) = self.players.get(&token) {
-            log::info!("{} - player {:?} joined team {:?}", self.id, name, team.team);
+    fn team(&mut self, token: Token, team: &request::Team) -> Result<Responses> {
+        let name = self.players.get(&token).ok_or(GameError::NotFound("player"))?;
 
-            self.game.add_player(token, team.team, &name);
-            let response = response::room(&self);
-            Ok(self.broadcast(response))
-        } else {
-            let response = response::error("player not found in game");
-            Ok(vec![(token, response)])
-        }
+        log::info!("{} - player {:?} joined team {:?}", self.id, name, team.team);
+        self.game.add_player(token, team.team, &name);
+
+        let response = response::room(&self);
+        Ok(self.broadcast(response))
     }
 
-    fn start(&mut self, token: Token, start: &request::Start) -> Result<Responses, RoomError> {
+    fn start(&mut self, token: Token, start: &request::Start) -> Result<Responses> {
         self.game.start(token, start)?;
         log::info!("{} - game started", self.id);
 
@@ -166,21 +155,21 @@ impl Room {
         Ok(responses)
     }
 
-    fn hint(&mut self, token: Token, hint: &request::Hint) -> Result<Responses, RoomError> {
+    fn hint(&mut self, token: Token, hint: &request::Hint) -> Result<Responses> {
         self.game.hint(token, &hint)?;
         log::info!("{} - hint {:?}", self.id, hint);
 
         Ok(self.broadcast(response::room(&self)))
     }
 
-    fn guess(&mut self, token: Token, guess: &request::Guess) -> Result<Responses, RoomError> {
+    fn guess(&mut self, token: Token, guess: &request::Guess) -> Result<Responses> {
         self.game.guess(token, &guess)?;
         log::info!("{} - guess {} {}", self.id, guess.x, guess.y);
 
         Ok(self.broadcast(response::room(&self)))
     }
 
-    fn pass(&mut self, token: Token) -> Result<Responses, RoomError> {
+    fn pass(&mut self, token: Token) -> Result<Responses> {
         self.game.pass(token)?;
         log::info!("{} - pass", self.id);
 

@@ -21,10 +21,16 @@ pub struct Stream {
 }
 
 #[derive(Debug)]
-pub enum Event {
-    Request(Token, Request),
-    Error(Token, RequestError),
-    Close(Token),
+pub struct Event {
+    pub token: Token,
+    pub kind: EventKind,
+}
+
+#[derive(Debug)]
+pub enum EventKind {
+    Request( Request),
+    Error(RequestError),
+    Close
 }
 
 impl Stream {
@@ -116,13 +122,22 @@ impl Stream {
                     Ok(message) => match message {
                         Message::Text(msg) => {
                             match Request::from_str(&msg) {
-                                Ok(request) => self.events.push(Event::Request(token, request)),
-                                Err(error) => self.events.push(Event::Error(token, error))
+                                Ok(request) => self.events.push(Event{
+                                    token: token,
+                                    kind: EventKind::Request(request)
+                                }),
+                                Err(error) => self.events.push(Event{
+                                    token: token,
+                                    kind: EventKind::Error(error)
+                                }),
                             }
                         },
                         Message::Close(_) => {
-                             self.events.push(Event::Close(token));
-                             return
+                            self.events.push(Event{
+                                token: token,
+                                kind: EventKind::Close
+                            });
+                            return
                         }
                         _ => {}
                     },
@@ -133,7 +148,10 @@ impl Stream {
                         },
                         _ => {
                             log::error!("read error: {}", error);
-                            self.events.push(Event::Close(token));
+                            self.events.push(Event{
+                                token: token,
+                                kind: EventKind::Close
+                            });
                             return
                         }
                     }
@@ -174,7 +192,10 @@ impl Stream {
             for (_, response) in filtered {
                 if let Err(error) = ws.write_message(response) {
                     log::error!("write error: {}", error);
-                    self.events.push(Event::Close(token));
+                    self.events.push(Event{
+                        token: token,
+                        kind: EventKind::Close
+                    });
                 }
             }
             self.poll.registry().reregister(ws.get_mut(), token, Interest::READABLE)?;

@@ -2,7 +2,8 @@ use crate::board::BoardSet;
 use crate::room::Room;
 use crate::request;
 use crate::response;
-use crate::stream::{Stream, Event};
+use crate::error::{GameError, RoomError};
+use crate::stream::{Stream, EventKind};
 use uuid::Uuid;
 use mio::Token;
 use std::collections::HashMap;
@@ -33,12 +34,17 @@ impl Server {
         loop {
             for event in self.stream.poll()? {
                 log::debug!("handling event: {:?}", event);
-                match event {
-                    Event::Request(token, request) => self.handle_request(token, request),
-                    Event::Close(token) => self.remove_player(token),
-                    Event::Error(token, error) => {
-                        let response = response::error(&error.to_string());
-                        self.stream.push(token, response)
+                match event.kind {
+                    EventKind::Request(request) => {
+                        if let Err(error) = self.handle_request(event.token, request) {
+                            self.stream.push(event.token, response::error(&error.to_string()))
+                        }
+                    }
+                    EventKind::Error(error) => {
+                        self.stream.push(event.token, response::error(&error.to_string()))
+                    },
+                    EventKind::Close => {
+                        self.remove_player(event.token)
                     }
                 }
             }
@@ -48,70 +54,68 @@ impl Server {
     fn remove_player(&mut self, token: Token) {
         if let Some(id) = self.players.remove(&token) {
 
-            let remove = if let Some(room) = self.rooms.get_mut(&id) {
-                self.stream.append(
-                    room.remove_player(token)
-                );
-                !room.is_alive(token) 
-            } else {
-                false
-            };
+            let mut remove = false;
+            if let Some(room) = self.rooms.get_mut(&id) {
+                self.stream.append(room.remove_player(token));
+                remove = !room.is_alive(token) 
+            }
 
             if remove {
-                log::info!("{} - closing room", id);
-                if let Some(room) = self.rooms.remove(&id) {
-                    for token in room.game.tokens() {
-                        self.stream.remove(*token)
-                    }
-                }
+                self.remove_room(id);
+            }
+        } 
+    }
+    
+    fn remove_room(&mut self, id: Uuid) {
+        if let Some(room) = self.rooms.remove(&id) {
+            log::info!("{} - closing room", id);
+            for token in room.game.tokens() {
+                self.players.remove(token);
+                self.stream.remove(*token);
             }
         }
     }
     
-    fn handle_request(&mut self, token: Token, request: request::Request) {
+    fn handle_request(&mut self, token: Token, request: request::Request) -> Result<(), RoomError> {
         if self.players.contains_key(&token) {
-            self.handle_room(token, &request);
+            self.handle_room(token, &request)
         } else {
-            self.handle_client(token, &request);
+            self.handle_client(token, &request)
         }
     }
 
-    fn handle_room(&mut self, token: Token, request: &request::Request) {
-        if let Some(id) = self.players.get(&token) {
-            if let Some(room) = self.rooms.get_mut(id) {
-                log::debug!("{} - handle token {} request {:?}", room.id, token.0, request);
-                let responses = room.handle(token, &request);
-                self.stream.append(responses);
-            }
-        }
+    fn handle_room(&mut self, token: Token, request: &request::Request) -> Result<(), RoomError> {
+        let id = self.players.get(&token).ok_or(GameError::NotFound("player"))?;
+        let room = self.rooms.get_mut(id).ok_or(RoomError::NotFound(id.clone()))?;
+
+        log::debug!("{} - handle token {} request {:?}", room.id, token.0, request);
+        let responses = room.handle(token, &request)?;
+        self.stream.append(responses);
+        
+        Ok(())
     }
 
-    fn handle_client(&mut self, token: Token, request: &request::Request) {
+    fn handle_client(&mut self, token: Token, request: &request::Request) -> Result<(), RoomError> {
         match &request {
             request::Request::Room(r) => self.new_room(token, r),
             request::Request::Join(j) if self.rooms.contains_key(&j.id) => {
                 log::debug!("{} - adding token {}", j.id, token.0);
                 self.players.insert(token, j.id);
-                self.handle_room(token, request);
+                self.handle_room(token, request)
             },
             _ => {
-                let msg = "invalid request. Expecting room or join";
-                self.stream.push(token, response::error(msg));
+                Err(RoomError::Forbidden)
             }
         }
     }
 
-    fn new_room(&mut self, token: Token, request: &request::Room) {
-        match Room::new(self.boardset.clone(), token, request) {
-            Ok(room) => {
-                log::info!("{} - new room created by {}", room.id, request.name);
-                self.players.insert(token, room.id);
-                self.stream.append(room.broadcast_room());
-                self.rooms.insert(room.id, room);
-            },
-            Err(error) => {
-                self.stream.push(token, response::error(&error.to_string()))
-            }
-        }
+    fn new_room(&mut self, token: Token, request: &request::Room) -> Result<(), RoomError> {
+        let room = Room::new(self.boardset.clone(), token, request)?;
+        log::info!("{} - new room created by {}", room.id, request.name);
+        self.players.insert(token, room.id);
+        self.stream.append(room.broadcast_room());
+        self.rooms.insert(room.id, room);
+
+        Ok(())
     }
 }
