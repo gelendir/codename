@@ -1,5 +1,6 @@
 use thiserror::Error;
 use serde_json::error::Error as SerdeError;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum RequestError {
@@ -29,12 +30,14 @@ pub enum GameError {
     NotStarted,
     #[error("game has already started")]
     AlreadyStarted,
+    #[error("card has already been set")]
+    CardSet,
 }
 
 #[derive(Error, Debug)]
 pub enum BoardError {
     #[error("language '{0}' not found")]
-    Language(String)
+    Language(String),
 }
 
 #[derive(Error, Debug)]

@@ -145,7 +145,7 @@ impl Game {
                     return Err(GameError::Turn("guess"))
                 }
 
-                let tile = self.board.put_card(guess.x, guess.y);
+                let tile = self.board.put_card(guess.x, guess.y)?;
                 let gameteam = self.team_mut(&team);
                 log::debug!("tile: {:?} team: {:?} gameteam: {:?}", tile, team, gameteam);
 

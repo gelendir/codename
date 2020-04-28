@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::io::Error;
 use rand::prelude::*;
 use crate::team::Team;
-use crate::error::BoardError;
+use crate::error::{GameError, BoardError};
 use std::collections::HashMap;
 
 
@@ -139,9 +139,13 @@ impl Board {
         }
     }
 
-    pub fn put_card(&mut self, x: usize, y: usize) -> Tile {
+    pub fn put_card(&mut self, x: usize, y: usize) -> Result<Tile, GameError> {
+        if self.cards[x][y] {
+            return Err(GameError::CardSet)
+        }
+
         self.cards[x][y] = true;
-        self.tiles[x][y].clone()
+        Ok(self.tiles[x][y].clone())
     }
 
     pub fn winner(&self) -> Option<Team> {
